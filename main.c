@@ -1,3 +1,6 @@
+// Extracted from:
+// https://mmlind.github.io/Using_Logistic_Regression_to_solve_MNIST/
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -5,6 +8,9 @@
 #define TOTAL_SAMPLES 12275
 #define TRAINING_SAMPLES 9795
 #define TEST_SAMPLES 2480
+#define NUM_PIXELS 2305 // Num pixels + 1 (bias)
+
+const float learning_rate = 0.01;
 
 int main(){
 
@@ -13,6 +19,7 @@ int main(){
     char *charbuffer, *emotion, *usage, *char_pixels, *temp_pixels;
     float *training, *test;
     float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
+    float accuracies[500];
 
 	FILE* FER_images = fopen(filename, "r");
     int i_train = 0, i_test = 0, i = 0;
@@ -30,7 +37,7 @@ int main(){
             char_pixels = strtok(NULL, ",");
             usage = strtok(NULL, ",");
 
-
+            // Se colocar isso dentro do if abaixo, em quantas vezes acelera?
             if(strcmp(usage, "Training\n") == 0){
                 is_training = 1;
             }
@@ -85,9 +92,71 @@ int main(){
           }
     }
 
+    // Arquivo lido. Fechar arquivo.
+    fclose(FER_images);
 
-fclose(FER_images);
+    // COMEÇO DO TREINO - BEGINNING OF TRAINING STAGE:
 
+    // Generate weight matrix
+    float* weights;
+
+    weights = (float *)malloc(NUM_PIXELS*sizeof(float));
+
+    for (int i=0; i<NUM_PIXELS; i++){
+        weights[i] = (float) rand(%2)/2.0; //>> 2 fica quanto mais rápido?
+    }
+
+    // Generate array to hold hypotesis results:
+    float* hypotesis;
+    hypotesis = (float *) malloc (TRAINING_SAMPLES*sizeof(float));
+
+    float temp = 0;
+
+    // BEGINING OF TRAINING EPOCHS
+
+    for (int epochs=0; epochs<500; epochs++){
+        
+        // Generate hypotesis values
+        for (long r=0; r<NUM_EXAMPLES; r++){        
+            for (long x=0; x<NUM_PIXELS; x++){
+                temp += *(training + (r*NUM_PIXELS)+x) * *(weights + x);
+            }
+            *(hypotesis + r) = temp;
+        }
+
+        // Calculate logistic hypotesis
+        float *val = hypotesis;
+        for (int i=0; i<TRAINING_SAMPLES; i++) {
+            val = val[i];
+            *val = 1 / (1 + (exp((float)-*val)) );
+        }
+
+        // Compute gradient into hypotesis & calculate accuracy on training set
+        float* dif = hypotesis;
+        float temp;
+        int right_answers;
+        for (int i = 0; i < TRAINING_SAMPLES; ++i){
+            temp = labels_train[i] - *(dif[i]);
+            *(dif[i]) = temp;
+            if (temp < 0){
+                temp = temp*-1; //Há como acelerar simplesmente manipulando os bits?
+            }
+            if (temp < 0.5){
+                right_answers++;
+            }
+        }
+
+        accuracies[epochs] = right_answers / TRAINING_SAMPLES; 
+
+        // Update weights
+        for (int i=0; i<NUM_PIXELS; i++){
+            *(weights) -= learning_rate * *(hypotesis[i]);
+        }
+    }
+
+    FILE* acc = fopen("acc.txt", w);
+    fwrite(accuracies, sizeof(char), 500, acc);
+    fclose(acc);
 
 
 }
