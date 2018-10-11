@@ -3,6 +3,7 @@
 #include<string.h>
 
 #define NUM_EXAMPLES  35900
+#define NUM_PIXELS 2305 // Number of pixels + 1 (bias)
 
 int main(){
 
