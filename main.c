@@ -4,6 +4,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<math.h>
 
 #define TOTAL_SAMPLES 12275
 #define TRAINING_SAMPLES 9795
@@ -103,7 +104,7 @@ int main(){
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
     for (int i=0; i<NUM_PIXELS; i++){
-        weights[i] = (float) rand(%2)/2.0; //>> 2 fica quanto mais rápido?
+        weights[i] = (float) ((rand()%2)/2.0); //>> 2 fica quanto mais rápido?
     }
 
     // Generate array to hold hypotesis results:
@@ -117,7 +118,7 @@ int main(){
     for (int epochs=0; epochs<500; epochs++){
         
         // Generate hypotesis values
-        for (long r=0; r<NUM_EXAMPLES; r++){        
+        for (long r=0; r<TRAINING_SAMPLES; r++){        
             for (long x=0; x<NUM_PIXELS; x++){
                 temp += *(training + (r*NUM_PIXELS)+x) * *(weights + x);
             }
@@ -127,7 +128,7 @@ int main(){
         // Calculate logistic hypotesis
         float *val = hypotesis;
         for (int i=0; i<TRAINING_SAMPLES; i++) {
-            val = val[i];
+            val = &(val[i]);
             *val = 1 / (1 + (exp((float)-*val)) );
         }
 
@@ -136,8 +137,8 @@ int main(){
         float temp;
         int right_answers;
         for (int i = 0; i < TRAINING_SAMPLES; ++i){
-            temp = labels_train[i] - *(dif[i]);
-            *(dif[i]) = temp;
+            temp = labels_train[i] - dif[i];
+            dif[i] = temp;
             if (temp < 0){
                 temp = temp*-1; //Há como acelerar simplesmente manipulando os bits?
             }
@@ -150,11 +151,11 @@ int main(){
 
         // Update weights
         for (int i=0; i<NUM_PIXELS; i++){
-            *(weights) -= learning_rate * *(hypotesis[i]);
+            *(weights) -= learning_rate * hypotesis[i];
         }
     }
 
-    FILE* acc = fopen("acc.txt", w);
+    FILE* acc = fopen("acc.txt", "w");
     fwrite(accuracies, sizeof(char), 500, acc);
     fclose(acc);
 
