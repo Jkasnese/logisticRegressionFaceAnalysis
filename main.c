@@ -10,6 +10,7 @@
 #define TRAINING_SAMPLES 9795
 #define TEST_SAMPLES 2480
 #define NUM_PIXELS 2305 // Num pixels + 1 (bias)
+#define NUM_EPOCHS 500
 
 const float learning_rate = 0.01;
 
@@ -20,7 +21,7 @@ int main(){
     char *charbuffer, *emotion, *usage, *char_pixels, *temp_pixels;
     float *training, *test;
     float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
-    float accuracies[500];
+    float accuracies[NUM_EPOCHS], losses[NUM_EPOCHS];
 
 	FILE* FER_images = fopen(filename, "r");
     int i_train = 0, i_test = 0, i = 0;
@@ -124,10 +125,11 @@ int main(){
     int right_answers = 0;
     float* dif;
     float* val;
+    float loss = 0;
 
     // BEGINING OF TRAINING EPOCHS
 
-    for (int epochs=0; epochs<500; epochs++){
+    for (int epochs=0; epochs<NUM_EPOCHS; epochs++){
         
         // Generate hypotesis values
         for (long r=0; r<TRAINING_SAMPLES; r++){        
@@ -141,16 +143,22 @@ int main(){
         // Calculate logistic hypotesis
         val = hypotesis;
         for (int i=0; i<TRAINING_SAMPLES; i++) {
+            
             *val = 1 / (1 + (exp( -1.0 * *val)) );
            // printf("%f\n", *val );
             val++;
         }
 
-        // Compute the difference between label and hypotesis & calculate accuracy on training set
+        // Compute the difference between label and hypotesis & 
+        //  accuracy on training set &
+        //  loss function &
+        //  metrics (accuracy, precision, recall, f1)
         dif = hypotesis;
         right_answers = 0;
-        for (int i = 0; i < TRAINING_SAMPLES; ++i){
+        loss = 0;
+        for (int i = 0; i < TRAINING_SAMPLES; ++i) {
             temp = labels_train[i] - dif[i];
+            loss -= labels_train[i]*log(dif[i]) + (1 - labels_train[i])*log(1-dif[i]); // Acelera se trocar por if/else dos labels?
             //printf("%f\n", temp);
             dif[i] = temp;
             if (temp < 0){
@@ -161,9 +169,10 @@ int main(){
             }
         }
 
-        temp = ((float) right_answers) / TRAINING_SAMPLES; 
-        accuracies[epochs] = temp;
-
+        // Saving metrics to be ploted later
+        accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
+        losses[epochs] = loss;
+//        printf("%f\n", loss);
         //printf("%f\n", temp*100);
 
         // Compute the gradient
@@ -186,7 +195,7 @@ int main(){
     }
 
     FILE* acc = fopen("acc.txt", "w");
-    for (int i = 0; i < 500; ++i)
+    for (int i = 0; i < NUM_EPOCHS; ++i)
     {
         fprintf(acc, "%f\n", accuracies[i]);
     }
