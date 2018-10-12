@@ -10,7 +10,7 @@
 #define TRAINING_SAMPLES 9795
 #define TEST_SAMPLES 2480
 #define NUM_PIXELS 2305 // Num pixels + 1 (bias)
-#define NUM_EPOCHS 500
+#define NUM_EPOCHS 50  
 
 const float learning_rate = 0.01;
 

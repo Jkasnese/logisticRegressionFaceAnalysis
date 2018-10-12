@@ -1,0 +1,23 @@
+# started on Fri Oct 12 15:06:08 2018
+
+
+ Performance counter stats for './gradopt.out' (5 runs):
+
+       4234,861331      task-clock (msec)         #    0,995 CPUs utilized            ( +-  1,13% )
+               433      context-switches          #    0,102 K/sec                    ( +- 22,07% )
+                 0      cpu-migrations            #    0,000 K/sec                    ( +-100,00% )
+            27.735      page-faults               #    0,007 M/sec                    ( +-  0,00% )
+    12.067.549.560      cycles                    #    2,850 GHz                      ( +-  0,79% )  (33,27%)
+     3.031.016.178      stalled-cycles-frontend   #   25,12% frontend cycles idle     ( +-  3,24% )  (44,42%)
+     1.172.935.824      stalled-cycles-backend    #    9,72% backend cycles idle      ( +-  6,66% )  (44,51%)
+    25.237.741.796      instructions              #    2,09  insn per cycle         
+                                                  #    0,12  stalled cycles per insn  ( +-  0,16% )  (55,67%)
+     4.930.267.183      branches                  # 1164,210 M/sec                    ( +-  0,10% )  (55,66%)
+        12.571.000      branch-misses             #    0,25% of all branches          ( +-  2,83% )  (55,67%)
+     5.845.065.667      L1-dcache-loads           # 1380,226 M/sec                    ( +-  0,06% )  (55,30%)
+        85.205.228      L1-dcache-load-misses     #    1,46% of all L1-dcache hits    ( +-  1,85% )  (22,11%)
+        30.626.503      LLC-loads                 #    7,232 M/sec                    ( +-  6,31% )  (22,17%)
+   <not supported>      LLC-load-misses                                             
+
+       4,256474477 seconds time elapsed                                          ( +-  1,05% )
+

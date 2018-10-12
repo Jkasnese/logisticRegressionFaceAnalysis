@@ -1,0 +1,93 @@
+# started on Fri Oct 12 12:41:15 2018
+
+[ perf stat: executing run #1 ... ]
+task-clock: 24071460949 24071460949 24071460949
+context-switches: 387 24071460949 24071460949
+cpu-migrations: 2 24071460949 24071460949
+page-faults: 27736 24071460949 24071460949
+cycles: 65761573485 24073382227 8017198401
+stalled-cycles-frontend: 46117458392 24073382227 10692772046
+stalled-cycles-backend: 27122714593 24073382227 10703879401
+instructions: 64246883247 24073382227 13378884279
+branches: 5865170367 24073382227 13383100465
+branch-misses: 12684617 24073382227 13380919294
+L1-dcache-loads: 25968452132 24073382227 13368634596
+L1-dcache-load-misses: 1617903744 24073382227 5347162970
+LLC-loads: 1528769222 24073382227 5342987510
+[ perf stat: executing run #2 ... ]
+task-clock: 22612020647 22612020647 22612020647
+context-switches: 1465 22612020647 22612020647
+cpu-migrations: 3 22612020647 22612020647
+page-faults: 27738 22612020647 22612020647
+cycles: 61776048758 22619272675 7523327137
+stalled-cycles-frontend: 42107758320 22619272675 10039084304
+stalled-cycles-backend: 23482227012 22619272675 10055335143
+instructions: 64280936864 22619272675 12561735742
+branches: 5858730866 22619272675 12582401353
+branch-misses: 12526519 22619272675 12572387467
+L1-dcache-loads: 25849942953 22619272675 12568183637
+L1-dcache-load-misses: 1612661560 22619272675 5036325832
+LLC-loads: 1541448023 22619272675 5015246527
+[ perf stat: executing run #3 ... ]
+task-clock: 25534953515 25534953515 25534953515
+context-switches: 2471 25534953515 25534953515
+cpu-migrations: 1 25534953515 25534953515
+page-faults: 27740 25534953515 25534953515
+cycles: 69217744882 25546795321 8516262739
+stalled-cycles-frontend: 49490391631 25546795321 11348255127
+stalled-cycles-backend: 30338567401 25546795321 11348411688
+instructions: 64593932117 25546795321 14195282526
+branches: 5896856618 25546795321 14188806582
+branch-misses: 13452860 25546795321 14193507190
+L1-dcache-loads: 25835345451 25546795321 14186539496
+L1-dcache-load-misses: 1633128985 25546795321 5672260216
+LLC-loads: 1531567669 25546795321 5674859759
+[ perf stat: executing run #4 ... ]
+task-clock: 23970735714 23970735714 23970735714
+context-switches: 1236 23970735714 23970735714
+cpu-migrations: 7 23970735714 23970735714
+page-faults: 27737 23970735714 23970735714
+cycles: 65276625172 23976838227 7987803014
+stalled-cycles-frontend: 45574974663 23976838227 10655328176
+stalled-cycles-backend: 26421245813 23976838227 10663466903
+instructions: 64743743687 23976838227 13335098878
+branches: 5900597870 23976838227 13325870424
+branch-misses: 13219719 23976838227 13320198788
+L1-dcache-loads: 25864694764 23976838227 13309609636
+L1-dcache-load-misses: 1629123120 23976838227 5328105149
+LLC-loads: 1542672031 23976838227 5322663123
+[ perf stat: executing run #5 ... ]
+task-clock: 22646776895 22646776895 22646776895
+context-switches: 618 22646776895 22646776895
+cpu-migrations: 1 22646776895 22646776895
+page-faults: 27740 22646776895 22646776895
+cycles: 62202549550 22649787108 7547024961
+stalled-cycles-frontend: 42537459620 22649787108 10065987227
+stalled-cycles-backend: 23717714345 22649787108 10070155509
+instructions: 64262985823 22649787108 12587937026
+branches: 5865196616 22649787108 12588446346
+branch-misses: 12596648 22649787108 12587930489
+L1-dcache-loads: 25885132555 22649787108 12571787092
+L1-dcache-load-misses: 1617808374 22649787108 5030161299
+LLC-loads: 1530089905 22649787108 5030933119
+
+ Performance counter stats for './a.out' (5 runs):
+
+      23767,189544      task-clock (msec)         #    0,997 CPUs utilized            ( +-  2,28% )
+             1.235      context-switches          #    0,052 K/sec                    ( +- 29,63% )
+                 3      cpu-migrations            #    0,000 K/sec                    ( +- 39,77% )
+            27.738      page-faults               #    0,001 M/sec                    ( +-  0,00% )
+    64.846.908.369      cycles                    #    2,728 GHz                      ( +-  2,08% )  (33,31%)
+    45.165.608.525      stalled-cycles-frontend   #   69,65% frontend cycles idle     ( +-  2,97% )  (44,42%)
+    26.216.493.833      stalled-cycles-backend    #   40,43% backend cycles idle      ( +-  4,79% )  (44,45%)
+    64.425.696.348      instructions              #    0,99  insn per cycle         
+                                                  #    0,70  stalled cycles per insn  ( +-  0,16% )  (55,57%)
+     5.877.310.467      branches                  #  247,287 M/sec                    ( +-  0,15% )  (55,58%)
+        12.896.073      branch-misses             #    0,22% of all branches          ( +-  1,44% )  (55,57%)
+    25.880.713.571      L1-dcache-loads           # 1088,926 M/sec                    ( +-  0,09% )  (55,53%)
+     1.622.125.157      L1-dcache-load-misses     #    6,27% of all L1-dcache hits    ( +-  0,24% )  (22,22%)
+     1.534.909.370      LLC-loads                 #   64,581 M/sec                    ( +-  0,19% )  (22,20%)
+   <not supported>      LLC-load-misses                                             
+
+      23,837067982 seconds time elapsed                                          ( +-  2,29% )
+
