@@ -164,7 +164,7 @@ int main(){
         temp = ((float) right_answers) / TRAINING_SAMPLES; 
         accuracies[epochs] = temp;
 
-        printf("%f\n", temp*100);
+        //printf("%f\n", temp*100);
 
         // Compute the gradient
         temp = 0;
@@ -180,13 +180,16 @@ int main(){
         
         // Update weights
         for (int i=0; i<NUM_PIXELS; i++){
-            weights[i] -= update * gradient[i];
+            weights[i] += update * gradient[i];
             //printf("%f\n", weights[i]);
         }
     }
 
     FILE* acc = fopen("acc.txt", "w");
-    fwrite(accuracies, sizeof(char), 500, acc);
+    for (int i = 0; i < 500; ++i)
+    {
+        fprintf(acc, "%f\n", accuracies[i]);
+    }
     fclose(acc);
 
 
