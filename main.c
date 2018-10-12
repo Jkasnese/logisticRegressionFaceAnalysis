@@ -18,7 +18,7 @@ int main(int argc, char *argv[]){
 
     float learning_rate = atof(argv[1]);
     int num_of_epochs = atoi(argv[2]);
-    printf("%.2f\n%d", learning_rate, num_of_epochs);
+    //printf("%.2f\n%d", learning_rate, num_of_epochs);
 
     char filename[] = "fer2013.csv";
     int buffer_size = 10000;
