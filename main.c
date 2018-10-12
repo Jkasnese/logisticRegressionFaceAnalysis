@@ -21,7 +21,10 @@ int main(){
     char *charbuffer, *emotion, *usage, *char_pixels, *temp_pixels;
     float *training, *test;
     float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
+
+    // Metrics holders
     float accuracies[NUM_EPOCHS], losses[NUM_EPOCHS];
+    float test_accuracy, precision, recall, fone;
 
 	FILE* FER_images = fopen(filename, "r");
     int i_train = 0, i_test = 0, i = 0;
@@ -173,7 +176,7 @@ int main(){
         accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
         losses[epochs] = loss;
 //        printf("%f\n", loss);
-        //printf("%f\n", temp*100);
+        //printf("%f\n", ((float) right_answers) / TRAINING_SAMPLES*100);
 
         // Compute the gradient
         temp = 0;
@@ -194,12 +197,74 @@ int main(){
         }
     }
 
-    FILE* acc = fopen("acc.txt", "w");
+    // CALCULATE TEST METRICS
+    // Generate hypotesis values
+    for (long r=0; r<TEST_SAMPLES; r++){        
+        for (long x=0; x<NUM_PIXELS; x++){
+            temp += *(test + (r*NUM_PIXELS)+x) * *(weights + x);
+        }
+        *(hypotesis + r) = temp;
+        temp = 0;
+    }
+
+    // Calculate logistic hypotesis
+    val = hypotesis;
+    for (int i=0; i<TEST_SAMPLES; i++) {
+        
+        *val = 1 / (1 + (exp( -1.0 * *val)) );
+       // printf("%f\n", *val );
+        val++;
+    }
+
+    // Compute the difference between label and hypotesis & 
+    //  accuracy on training set &
+    //  loss function &
+    //  metrics (accuracy, precision, recall, f1)
+    dif = hypotesis;
+    right_answers = 0;
+    int fp = 0, tp = 0, tn = 0, fn = 0;
+    for (int i = 0; i < TEST_SAMPLES; ++i) {
+        //temp = labels_train[i] - dif[i];
+        // dif[i] = temp;
+        if (labels_train[i] == 1.0){
+            if (dif[i] < 0.5){
+                // FP
+                fp++;
+            } else {
+                // TP
+                tp++;
+            }
+        } else {
+            if (dif[i] < 0.5){
+                // TN
+                tn++;
+            } else {
+                // FN
+                fn++;
+            }
+        }
+    }
+
+    // Saving metrics to be ploted later
+    test_accuracy = ((float) (tp + tn))/ TEST_SAMPLES;
+    precision = ((float) tp) / (tp+fp);
+    recall = ((float) tp) / (tp + fn);
+    fone = 2*((precision*recall) / (precision + recall));
+
+    // Write data to files
+    FILE* facc = fopen("training_acc.txt", "w");
+    FILE* floss = fopen("loss.txt", "w");
+    FILE* ftest = fopen("test_metrics.txt", "w");
+
     for (int i = 0; i < NUM_EPOCHS; ++i)
     {
-        fprintf(acc, "%f\n", accuracies[i]);
+        fprintf(facc, "%f\n", accuracies[i]);
+        fprintf(floss, "%f\n", losses[i]);
     }
-    fclose(acc);
 
+    fprintf(ftest, "%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
 
+    fclose(facc);
+    fclose(floss);
+    fclose(ftest);
 }
