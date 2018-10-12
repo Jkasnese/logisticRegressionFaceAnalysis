@@ -104,14 +104,22 @@ int main(){
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
     for (int i=0; i<NUM_PIXELS; i++){
-        weights[i] = (float) ((rand()%2)/2.0); //>> 2 fica quanto mais rápido?
+        weights[i] =  ( (rand() % 100) / 143.0) - 0.35; //>> 2 fica quanto mais rápido?
     }
 
     // Generate array to hold hypotesis results:
     float* hypotesis;
     hypotesis = (float *) malloc (TRAINING_SAMPLES*sizeof(float));
 
+    float* gradient;
+    gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
+
+    const float update = learning_rate/TRAINING_SAMPLES;
+
     float temp = 0;
+    int right_answers = 0;
+    float* dif;
+    float* val;
 
     // BEGINING OF TRAINING EPOCHS
 
@@ -123,19 +131,20 @@ int main(){
                 temp += *(training + (r*NUM_PIXELS)+x) * *(weights + x);
             }
             *(hypotesis + r) = temp;
+            temp = 0;
         }
 
         // Calculate logistic hypotesis
-        float *val = hypotesis;
+        val = hypotesis;
         for (int i=0; i<TRAINING_SAMPLES; i++) {
-            val = &(val[i]);
-            *val = 1 / (1 + (exp((float)-*val)) );
+            *val = 1 / (1 + (exp( -1.0 * *val)) );
+            //printf("%f\n", *val );
+            val++;
         }
 
-        // Compute gradient into hypotesis & calculate accuracy on training set
-        float* dif = hypotesis;
-        float temp;
-        int right_answers;
+        // Compute the difference between label and hypotesis & calculate accuracy on training set
+        dif = hypotesis;
+        right_answers = 0;
         for (int i = 0; i < TRAINING_SAMPLES; ++i){
             temp = labels_train[i] - dif[i];
             dif[i] = temp;
@@ -147,11 +156,27 @@ int main(){
             }
         }
 
-        accuracies[epochs] = right_answers / TRAINING_SAMPLES; 
+        temp = ((float) right_answers) / TRAINING_SAMPLES; 
+        accuracies[epochs] = temp;
 
+        printf("%f\n", temp*100);
+
+        // Compute the gradient
+        temp = 0;
+        for (long r=0; r<NUM_PIXELS; r++){        
+            for (long x=0; x<TRAINING_SAMPLES; x++){
+                //printf("%f\n", temp);
+                temp += *(training + NUM_PIXELS*x) * hypotesis[x];
+            }
+            
+            *(gradient + r) = temp;
+            temp = 0;
+        }
+        
         // Update weights
         for (int i=0; i<NUM_PIXELS; i++){
-            *(weights) -= learning_rate * hypotesis[i];
+            weights[i] -= update * gradient[i];
+            printf("%f\n", weights[i]);
         }
     }
 
