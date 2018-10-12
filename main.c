@@ -96,6 +96,10 @@ int main(){
     // Arquivo lido. Fechar arquivo.
     fclose(FER_images);
 
+    // Adding bias
+    training[NUM_PIXELS-1] = 1;
+    test[NUM_PIXELS-1] = 1;
+
     // COMEÇO DO TREINO - BEGINNING OF TRAINING STAGE:
 
     // Generate weight matrix
@@ -138,7 +142,7 @@ int main(){
         val = hypotesis;
         for (int i=0; i<TRAINING_SAMPLES; i++) {
             *val = 1 / (1 + (exp( -1.0 * *val)) );
-            //printf("%f\n", *val );
+           // printf("%f\n", *val );
             val++;
         }
 
@@ -147,6 +151,7 @@ int main(){
         right_answers = 0;
         for (int i = 0; i < TRAINING_SAMPLES; ++i){
             temp = labels_train[i] - dif[i];
+            //printf("%f\n", temp);
             dif[i] = temp;
             if (temp < 0){
                 temp = temp*-1; //Há como acelerar simplesmente manipulando os bits?
@@ -166,7 +171,7 @@ int main(){
         for (long r=0; r<NUM_PIXELS; r++){        
             for (long x=0; x<TRAINING_SAMPLES; x++){
                 //printf("%f\n", temp);
-                temp += *(training + NUM_PIXELS*x) * hypotesis[x];
+                temp += *(training + (NUM_PIXELS*x)+r) * hypotesis[x];
             }
             
             *(gradient + r) = temp;
@@ -176,7 +181,7 @@ int main(){
         // Update weights
         for (int i=0; i<NUM_PIXELS; i++){
             weights[i] -= update * gradient[i];
-            printf("%f\n", weights[i]);
+            //printf("%f\n", weights[i]);
         }
     }
 
