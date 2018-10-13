@@ -183,9 +183,10 @@ int main(){
         // Compute the gradient
         for (long r=0; r<TRAINING_SAMPLES; r++){        
             aux = hypotesis[r];
+            r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
                 //printf("%f\n", temp);
-                gradient[x] += training[x] * aux;
+                gradient[x] += training[r_numpixels + x] * aux;
             }
         }
         
@@ -257,8 +258,7 @@ int main(){
     FILE* floss = fopen("loss.txt", "w");
     FILE* ftest = fopen("test_metrics.txt", "w");
 
-    for (int i = 0; i < NUM_EPOCHS; ++i)
-    {
+    for (int i = 0; i < NUM_EPOCHS; ++i) {
         fprintf(facc, "%f\n", accuracies[i]);
         fprintf(floss, "%f\n", losses[i]);
     }
