@@ -16,36 +16,40 @@ const float learning_rate = 0.01;
 
 int main(int argc, char *argv[]){
 
-    int num_of_epochs = atoi(argv[1]);
-    int num_of_train_samples = atoi(argv[2]);
+    float learning_rate = atof(argv[1]);
+    int num_of_epochs = atoi(argv[2]);
+    printf("%.2f\n%d", learning_rate, num_of_epochs);
 
     char filename[] = "fer2013.csv";
-    int buffer_size = 10000, emotion_6 = 0, emotion_4 = 0;
+    int buffer_size = 10000;
     char *charbuffer, *emotion, *usage, *char_pixels, *temp_pixels;
     float *training, *test;
-    float labels_train[num_of_train_samples], labels_test[TEST_SAMPLES], pixel;
+    float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
 
     // Metrics holders
     float accuracies[num_of_epochs], losses[num_of_epochs];
     float test_accuracy, precision, recall, fone;
 
-    FILE* FER_images = fopen(filename, "r");
-    int i_train = 0, i_test = 0, i = 0, j = 0;
+	FILE* FER_images = fopen(filename, "r");
+    int i_train = 0, i_test = 0, i = 0;
     int offset = 0;
-    int is_training; // 1 == training, 0 == test
+    int is_training; /**< Holds the value 1 if the image is part of the training set and 0 otherwise. */
 
+     /**
+        Allocating memory for the arrays to be used.
+    */
     charbuffer = (char *)malloc(buffer_size*sizeof(char));
     temp_pixels = (char *)malloc(2*sizeof(float));
-    training = (float *)calloc((num_of_train_samples * 2305), sizeof(float));
-    test = (float *)calloc((TEST_SAMPLES * 2305), sizeof(float));
+    training = (float *)malloc((TRAINING_SAMPLES * 2305)*sizeof(float));
+    test = (float *)malloc((TEST_SAMPLES * 2305)*sizeof(float));
 
-
-    // Lendo todo o arquivo para treino
+    /**
+        Reads the .csv file containing all of the data and separates training samples from test samples.
+    */
     while(fgets(charbuffer, buffer_size, FER_images) != NULL) {
-
-            emotion = strtok(charbuffer, ",");
-            char_pixels = strtok(NULL, ",");
-            usage = strtok(NULL, ",");
+            emotion = strtok(charbuffer, ",");// Gets the first field of a line, which corresponds to the facial expression portraied by the image
+            char_pixels = strtok(NULL, ","); // Gets the second field of a line, corresponding to the pixels of the image
+            usage = strtok(NULL, ",");  // Gets the third field of a line, which identifies whether the sample is part of a training or test set
 
             // Se colocar isso dentro do if abaixo, em quantas vezes acelera?
             if(strcmp(usage, "Training\n") == 0){
@@ -54,13 +58,11 @@ int main(int argc, char *argv[]){
             else
                 is_training = 0;
 
+
             if (strcmp(emotion, "6") == 0 || strcmp(emotion, "4") == 0){
                 if (strcmp(emotion, "6") == 0){
                     if(is_training == 1){
-                        if(i_train < num_of_train_samples){
-
-                           labels_train[i_train] = 1;
-                        }
+                        labels_train[i_train] = 1;
                     }
                     else{
                         labels_test[i_test] = 1;
@@ -69,9 +71,7 @@ int main(int argc, char *argv[]){
                 }
                 else{
                     if(is_training == 1){
-                        if(i_train < num_of_train_samples){
-                           labels_train[i_train] = 0;
-                        }
+                        labels_train[i_train] = 0;
                     }
                     else{
                         labels_test[i_test] = 0;
@@ -80,17 +80,14 @@ int main(int argc, char *argv[]){
 
                 temp_pixels = strtok(char_pixels, " ");
 
-                for (j = 0; j < 2304; j++){
+                for (int j = 0; j < 2304; j++){
                     pixel = atof(temp_pixels);
 
-                    if(is_training == 1 ){
-                        if(i_train < num_of_train_samples){
-                            offset = i_train*2305 + j;
-                            training[offset] = pixel/255.0;
-                        }
+                    if(is_training == 1){
+                        offset = i_train*2305 + j;
+                        training[offset] = pixel/255.0;
                     }
                     else{
-
                         offset = i_test*2305 + j;
                         test[offset] = pixel/255.0;
                     }
@@ -99,23 +96,20 @@ int main(int argc, char *argv[]){
                 }
 
                 if(is_training == 1){
-                    if(i_train < num_of_train_samples){
-                        training[i_train*NUM_PIXELS + j] = 1;
-                        i_train++;
-                    }
+                    i_train++;
                 }
                 else{
-                   test[i_test*NUM_PIXELS + j] = 1;
                     i_test++;
                 }
           }
     }
 
-
-
     // Arquivo lido. Fechar arquivo.
     fclose(FER_images);
+
     // Adding bias
+    training[NUM_PIXELS-1] = 1;
+    test[NUM_PIXELS-1] = 1;
 
     // COMEÇO DO TREINO - BEGINNING OF TRAINING STAGE:
 
@@ -125,34 +119,32 @@ int main(int argc, char *argv[]){
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
     for (int i=0; i<NUM_PIXELS; i++){
-        weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
+        weights[i] =  ( (rand() % 100) / 143.0) - 0.35; //>> 2 fica quanto mais rápido?
     }
 
     // Generate array to hold hypothesis results:
     float* hypothesis;
-    hypothesis = (float *) malloc (num_of_train_samples*sizeof(float));
+    hypothesis = (float *) malloc (TRAINING_SAMPLES*sizeof(float));
 
     float* gradient;
     gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
 
-    const float update = learning_rate/num_of_train_samples;
+    const float update = learning_rate/TRAINING_SAMPLES;
 
     float temp = 0;
     int right_answers = 0;
     float* dif;
     float* val;
-    float aux;
     float loss = 0;
 
     // BEGINING OF TRAINING EPOCHS
-    int r_numpixels;
+
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
         // Generate hypothesis values
-        for (long r=0; r<num_of_train_samples; r++){
-            r_numpixels = r*NUM_PIXELS;
+        for (long r=0; r<TRAINING_SAMPLES; r++){
             for (long x=0; x<NUM_PIXELS; x++){
-                temp += *(training + (r_numpixels)+x) * *(weights + x);
+                temp += *(training + (r*NUM_PIXELS)+x) * *(weights + x);
             }
             *(hypothesis + r) = temp;
             temp = 0;
@@ -160,7 +152,7 @@ int main(int argc, char *argv[]){
 
         // Calculate logistic hypothesis
         val = hypothesis;
-        for (int i=0; i<num_of_train_samples; i++) {
+        for (int i=0; i<TRAINING_SAMPLES; i++) {
 
             *val = 1 / (1 + (exp( -1.0 * *val)) );
            // printf("%f\n", *val );
@@ -174,7 +166,7 @@ int main(int argc, char *argv[]){
         dif = hypothesis;
         right_answers = 0;
         loss = 0;
-        for (int i = 0; i < num_of_train_samples; ++i) {
+        for (int i = 0; i < TRAINING_SAMPLES; ++i) {
             temp = labels_train[i] - dif[i];
             loss -= labels_train[i]*log(dif[i]) + (1 - labels_train[i])*log(1-dif[i]); // Acelera se trocar por if/else dos labels?
             //printf("%f\n", temp);
@@ -186,31 +178,28 @@ int main(int argc, char *argv[]){
                 right_answers++;
             }
         }
-       // printf("%d\n",  num_of_train_samples);
+
         // Saving metrics to be ploted later
-        accuracies[epochs] = ((float) right_answers) / num_of_train_samples;
+        accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
         losses[epochs] = loss;
 //        printf("%f\n", loss);
-        //printf("%f\n", ((float) right_answers) / num_of_train_samples*100);
+        //printf("%f\n", ((float) right_answers) / TRAINING_SAMPLES*100);
 
-        for (int i = 0; i < NUM_PIXELS; ++i)
-        {
-            gradient[i] = 0;
-        }
         // Compute the gradient
-        for (long r=0; r<num_of_train_samples; r++){
-            aux = hypothesis[r];
-            r_numpixels = r*NUM_PIXELS;
-            for (long x=0; x<NUM_PIXELS; x++){
+        temp = 0;
+        for (long r=0; r<NUM_PIXELS; r++){
+            for (long x=0; x<TRAINING_SAMPLES; x++){
                 //printf("%f\n", temp);
-                gradient[x] += training[r_numpixels + x] * aux;
+                temp += *(training + (NUM_PIXELS*x)+r) * hypothesis[x];
             }
+
+            *(gradient + r) = temp;
+            temp = 0;
         }
 
         // Update weights
         for (int i=0; i<NUM_PIXELS; i++){
             weights[i] += update * gradient[i];
-
             //printf("%f\n", weights[i]);
         }
     }
@@ -218,9 +207,8 @@ int main(int argc, char *argv[]){
     // CALCULATE TEST METRICS
     // Generate hypothesis values
     for (long r=0; r<TEST_SAMPLES; r++){
-        r_numpixels = r*NUM_PIXELS;
         for (long x=0; x<NUM_PIXELS; x++){
-            temp += *(test + r_numpixels+x) * weights[x];
+            temp += *(test + (r*NUM_PIXELS)+x) * *(weights + x);
         }
         *(hypothesis + r) = temp;
         temp = 0;
@@ -245,7 +233,7 @@ int main(int argc, char *argv[]){
     for (int i = 0; i < TEST_SAMPLES; ++i) {
         //temp = labels_train[i] - dif[i];
         // dif[i] = temp;
-        if (labels_test[i] == 1.0){
+        if (labels_train[i] == 1.0){
             if (dif[i] < 0.5){
                 // FP
                 fp++;
@@ -264,7 +252,6 @@ int main(int argc, char *argv[]){
         }
     }
 
-
     // Saving metrics to be ploted later
     test_accuracy = ((float) (tp + tn))/ TEST_SAMPLES;
     precision = ((float) tp) / (tp+fp);
@@ -272,25 +259,33 @@ int main(int argc, char *argv[]){
     fone = 2*((precision*recall) / (precision + recall));
 
     // Write data to files
-    FILE* facc = fopen("training_acc.txt", "w");
-    FILE* floss = fopen("loss.txt", "w");
-    FILE* ftest = fopen("test_metrics.txt", "w");
+    
+    char char_epoch[255], char_learning_rate[10];
+    sprintf(char_epoch, "%.0f", (float) num_of_epochs);
+    strcat(char_epoch, "_");
+    sprintf(char_learning_rate, "%.3f", learning_rate);
+    strcat(char_epoch, char_learning_rate);
+    char training_filename[255], loss_filename[255], test_filename[255];
+    strcpy(training_filename, char_epoch);
+    strcpy(loss_filename, char_epoch);
+    strcpy(test_filename, char_epoch); 
+    strcat(training_filename, "_training_acc.txt");
+    strcat(loss_filename, "_loss.txt");
+    strcat(test_filename, "_test_metrics.txt");
 
+    FILE* facc = fopen(training_filename, "w");
+    FILE* floss = fopen(loss_filename, "w");
+    FILE* ftest = fopen(test_filename, "w");
 
-   for (int i = 0; i < num_of_epochs; ++i)
+    for (int i = 0; i < num_of_epochs; ++i)
     {
         fprintf(facc, "%f\n", accuracies[i]);
         fprintf(floss, "%f\n", losses[i]);
     }
 
-    if(facc != 0 && floss != 0 && ftest != 0) {
     fprintf(ftest, "%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
-
-
-    //printf("%d\n",  num_of_train_samples);
 
     fclose(facc);
     fclose(floss);
-    fclose(ftest);}
-
+    fclose(ftest);
 }

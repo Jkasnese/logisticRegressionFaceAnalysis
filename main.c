@@ -10,7 +10,7 @@
 #define TRAINING_SAMPLES 9795
 #define TEST_SAMPLES 2480
 #define NUM_PIXELS 2305 // Num pixels + 1 (bias)
-#define NUM_EPOCHS 50  
+#define NUM_EPOCHS 500
 
 const float learning_rate = 0.01;
 
@@ -18,7 +18,7 @@ int main(int argc, char *argv[]){
 
     float learning_rate = atof(argv[1]);
     int num_of_epochs = atoi(argv[2]);
-    //printf("%.2f\n%d", learning_rate, num_of_epochs);
+    printf("%.2f\n%d", learning_rate, num_of_epochs);
 
     char filename[] = "fer2013.csv";
     int buffer_size = 10000;
@@ -33,20 +33,24 @@ int main(int argc, char *argv[]){
 	FILE* FER_images = fopen(filename, "r");
     int i_train = 0, i_test = 0, i = 0;
     int offset = 0;
-    int is_training; // 1 == training, 0 == test
+    int is_training; /**< Holds the value 1 if the image is part of the training set and 0 otherwise. */
 
+     /**
+        Allocating memory for the arrays to be used.
+    */
     charbuffer = (char *)malloc(buffer_size*sizeof(char));
     temp_pixels = (char *)malloc(2*sizeof(float));
     training = (float *)malloc((TRAINING_SAMPLES * 2305)*sizeof(float));
     test = (float *)malloc((TEST_SAMPLES * 2305)*sizeof(float));
 
-    // Lendo todo o arquivo para treino
+    /**
+        Reads the .csv file containing all of the data and separates training samples from test samples.
+    */
     while(fgets(charbuffer, buffer_size, FER_images) != NULL) {
-            emotion = strtok(charbuffer, ",");
-            char_pixels = strtok(NULL, ",");
-            usage = strtok(NULL, ",");
+            emotion = strtok(charbuffer, ",");// Gets the first field of a line, which corresponds to the facial expression portraied by the image
+            char_pixels = strtok(NULL, ","); // Gets the second field of a line, corresponding to the pixels of the image
+            usage = strtok(NULL, ",");  // Gets the third field of a line, which identifies whether the sample is part of a training or test set
 
-            // Se colocar isso dentro do if abaixo, em quantas vezes acelera?
             if(strcmp(usage, "Training\n") == 0){
                 is_training = 1;
             }
@@ -91,9 +95,11 @@ int main(int argc, char *argv[]){
                 }
 
                 if(is_training == 1){
+                    training[i_train*NUM_PIXELS + j] = 1; // Adding bias
                     i_train++;
                 }
                 else{
+                    test[i_test*NUM_PIXELS + j] = 1; 
                     i_test++;
                 }
           }
@@ -102,13 +108,10 @@ int main(int argc, char *argv[]){
     // Arquivo lido. Fechar arquivo.
     fclose(FER_images);
 
-    // Adding bias
-    training[NUM_PIXELS-1] = 1;
-    test[NUM_PIXELS-1] = 1;
 
     // COMEÇO DO TREINO - BEGINNING OF TRAINING STAGE:
 
-    // Generate weight matrix
+    /** Generate weight matrix */
     float* weights;
 
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
@@ -117,7 +120,7 @@ int main(int argc, char *argv[]){
         weights[i] =  ( (rand() % 100) / 143.0) - 0.35; //>> 2 fica quanto mais rápido?
     }
 
-    // Generate array to hold hypothesis results:
+    /** Generate array to hold hypothesis results:*/
     float* hypothesis;
     hypothesis = (float *) malloc (TRAINING_SAMPLES*sizeof(float));
 
@@ -136,7 +139,7 @@ int main(int argc, char *argv[]){
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
-        // Generate hypothesis values
+        /* Generate hypothesis values */
         for (long r=0; r<TRAINING_SAMPLES; r++){
             for (long x=0; x<NUM_PIXELS; x++){
                 temp += *(training + (r*NUM_PIXELS)+x) * *(weights + x);
@@ -145,7 +148,7 @@ int main(int argc, char *argv[]){
             temp = 0;
         }
 
-        // Calculate logistic hypothesis
+        /* Calculate logistic hypothesis by passing initial hypothesis through the sigmoid function */
         val = hypothesis;
         for (int i=0; i<TRAINING_SAMPLES; i++) {
 
