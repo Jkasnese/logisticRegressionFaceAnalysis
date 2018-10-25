@@ -5,6 +5,7 @@
 #include<stdlib.h>
 #include<string.h>
 #include<math.h>
+#include<omp.h>
 
 #define TOTAL_SAMPLES 12275
 #define TRAINING_SAMPLES 9795
@@ -117,9 +118,6 @@ int main(int argc, char *argv[]){
 
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
-    for (int i=0; i<NUM_PIXELS; i++){
-        weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
-    }
 
     // Generate array to hold hypothesis results:
     float* hypothesis;
@@ -136,12 +134,22 @@ int main(int argc, char *argv[]){
     float* val;
     float aux;
     float loss = 0;
+    int r_numpixels;
+
+    
+
+    // PARALELIZA
+    //#pragma omp parallel for 
+    for (int i=0; i<NUM_PIXELS; i++){
+        weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
+    }
 
     // BEGINING OF TRAINING EPOCHS
-    int r_numpixels;
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
+        // PARALELIZA
         // Generate hypothesis values
+        #pragma omp parallel for private(temp)
         for (long r=0; r<TRAINING_SAMPLES; r++){
             r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
@@ -151,6 +159,8 @@ int main(int argc, char *argv[]){
             temp = 0;
         }
 
+        // PARALELIZA
+        // COLOCAR VAL NO FOR VAL++
         // Calculate logistic hypothesis
         val = hypothesis;
         for (int i=0; i<TRAINING_SAMPLES; i++) {
@@ -164,6 +174,8 @@ int main(int argc, char *argv[]){
         //  accuracy on training set &
         //  loss function &
         //  metrics (accuracy, precision, recall, f1)
+        // PARALELIZA TALVEZ. CONDIÇÃO DE CORRIDA LOSS. 
+        // TEMP DEVE SER UMA VARIÁVEL INDIVIDUAL PARA CADA THREAD
         dif = hypothesis;
         right_answers = 0;
         loss = 0;
@@ -186,11 +198,15 @@ int main(int argc, char *argv[]){
 //        printf("%f\n", loss);
         //printf("%f\n", ((float) right_answers) / TRAINING_SAMPLES*100);
 
+        // PARALELIZA. COLOCAR DENTRO DO FOR DE UPDATE WEIGHTS. DEPOIS DE ATUALIZAR O PESO.
         for (int i = 0; i < NUM_PIXELS; ++i)
         {
             gradient[i] = 0;
         }
+
         // Compute the gradient
+        // PARALELIZA
+        // SEMÁFORO GRADIENTE
         for (long r=0; r<TRAINING_SAMPLES; r++){
             aux = hypothesis[r];
             r_numpixels = r*NUM_PIXELS;
@@ -201,15 +217,16 @@ int main(int argc, char *argv[]){
         }
 
         // Update weights
+        // PARALELIZA
         for (int i=0; i<NUM_PIXELS; i++){
             weights[i] += update * gradient[i];
-
             //printf("%f\n", weights[i]);
         }
     }
 
     // CALCULATE TEST METRICS
     // Generate hypothesis values
+    // PARALELIZA
     for (long r=0; r<TEST_SAMPLES; r++){
         r_numpixels = r*NUM_PIXELS;
         for (long x=0; x<NUM_PIXELS; x++){
@@ -221,6 +238,7 @@ int main(int argc, char *argv[]){
 
     // Calculate logistic hypothesis
     val = hypothesis;
+    // PARALELIZA. VAL NO FOR VAL++
     for (int i=0; i<TEST_SAMPLES; i++) {
 
         *val = 1 / (1 + (exp( -1.0 * *val)) );
@@ -235,6 +253,7 @@ int main(int argc, char *argv[]){
     dif = hypothesis;
     right_answers = 0;
     int fp = 0, tp = 0, tn = 0, fn = 0;
+    // SEMÁFOROS. VER SE DÁ PRA PARALELIZAR
     for (int i = 0; i < TEST_SAMPLES; ++i) {
         //temp = labels_train[i] - dif[i];
         // dif[i] = temp;

@@ -17,13 +17,13 @@ const float learning_rate = 0.01;
 int main(int argc, char *argv[]){
 
     int num_of_epochs = atoi(argv[1]);
-
+    int num_of_train_samples = atoi(argv[2]);
 
     char filename[] = "fer2013.csv";
     int buffer_size = 10000, emotion_6 = 0, emotion_4 = 0;
     char *charbuffer, *emotion, *usage, *char_pixels, *temp_pixels;
     float *training, *test;
-    float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
+    float *labels_train, labels_test[TEST_SAMPLES], pixel;
 
     // Metrics holders
     float accuracies[num_of_epochs], losses[num_of_epochs];
@@ -34,19 +34,22 @@ int main(int argc, char *argv[]){
     int offset = 0;
     int is_training; // 1 == training, 0 == test
 
+
     charbuffer = (char *)malloc(buffer_size*sizeof(char));
     temp_pixels = (char *)malloc(2*sizeof(float));
-    training = (float *)malloc((TRAINING_SAMPLES * 2305)*sizeof(float));
-    test = (float *)malloc((TEST_SAMPLES * 2305)*sizeof(float));
-
+    training = (float *)calloc((num_of_train_samples * 2305), sizeof(float));
+    test = (float *)calloc((TEST_SAMPLES * 2305), sizeof(float));
+    labels_train = (float *)malloc(num_of_train_samples*sizeof(float));
+    
 
     // Lendo todo o arquivo para treino
     while(fgets(charbuffer, buffer_size, FER_images) != NULL) {
+
             emotion = strtok(charbuffer, ",");
             char_pixels = strtok(NULL, ",");
             usage = strtok(NULL, ",");
 
-        
+            // Se colocar isso dentro do if abaixo, em quantas vezes acelera?
             if(strcmp(usage, "Training\n") == 0){
                 is_training = 1;
             }
@@ -56,8 +59,10 @@ int main(int argc, char *argv[]){
             if (strcmp(emotion, "6") == 0 || strcmp(emotion, "4") == 0){
                 if (strcmp(emotion, "6") == 0){
                     if(is_training == 1){
-                        labels_train[i_train] = 1;
-                        emotion_6++;
+                        if(i_train < num_of_train_samples){
+
+                           labels_train[i_train] = 1;
+                        }
                     }
                     else{
                         labels_test[i_test] = 1;
@@ -66,8 +71,9 @@ int main(int argc, char *argv[]){
                 }
                 else{
                     if(is_training == 1){
-                        labels_train[i_train] = 0;
-                        emotion_4++;
+                        if(i_train < num_of_train_samples){
+                           labels_train[i_train] = 0;
+                        }
                     }
                     else{
                         labels_test[i_test] = 0;
@@ -79,35 +85,38 @@ int main(int argc, char *argv[]){
                 for (j = 0; j < 2304; j++){
                     pixel = atof(temp_pixels);
 
-                    if(is_training == 1){
-                        offset = i_train*2305 + j;
-                        training[offset] = pixel/255.0;
+                    if(is_training == 1 ){
+                        if(i_train < num_of_train_samples){
+                            offset = i_train*2305 + j;
+                            training[offset] = pixel;//255.0;
+                        }
                     }
                     else{
+
                         offset = i_test*2305 + j;
-                        test[offset] = pixel/255.0;
+                        test[offset] = pixel;//255.0;
                     }
 
                     temp_pixels = strtok(NULL, " ");
                 }
 
                 if(is_training == 1){
-
-                    training[i_train*NUM_PIXELS + j] = 1;
-                    i_train++;
-                    
+                    if(i_train < num_of_train_samples){
+                        training[i_train*NUM_PIXELS + j] = 1;
+                        i_train++;
+                    }
                 }
                 else{
-                    test[i_test*NUM_PIXELS + j] = 1;
+                   test[i_test*NUM_PIXELS + j] = 1;
                     i_test++;
                 }
           }
     }
 
 
+
     // Arquivo lido. Fechar arquivo.
     fclose(FER_images);
-
     // Adding bias
 
     // COMEÇO DO TREINO - BEGINNING OF TRAINING STAGE:
@@ -123,12 +132,12 @@ int main(int argc, char *argv[]){
 
     // Generate array to hold hypothesis results:
     float* hypothesis;
-    hypothesis = (float *) malloc (TRAINING_SAMPLES*sizeof(float));
+    hypothesis = (float *) malloc (num_of_train_samples*sizeof(float));
 
     float* gradient;
     gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
 
-    const float update = learning_rate/TRAINING_SAMPLES;
+    const float update = learning_rate/num_of_train_samples;
 
     float temp = 0;
     int right_answers = 0;
@@ -142,7 +151,7 @@ int main(int argc, char *argv[]){
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
         // Generate hypothesis values
-        for (long r=0; r<TRAINING_SAMPLES; r++){
+        for (long r=0; r<num_of_train_samples; r++){
             r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
                 temp += *(training + (r_numpixels)+x) * *(weights + x);
@@ -153,7 +162,7 @@ int main(int argc, char *argv[]){
 
         // Calculate logistic hypothesis
         val = hypothesis;
-        for (int i=0; i<TRAINING_SAMPLES; i++) {
+        for (int i=0; i<num_of_train_samples; i++) {
 
             *val = 1 / (1 + (exp( -1.0 * *val)) );
            // printf("%f\n", *val );
@@ -167,7 +176,7 @@ int main(int argc, char *argv[]){
         dif = hypothesis;
         right_answers = 0;
         loss = 0;
-        for (int i = 0; i < TRAINING_SAMPLES; ++i) {
+        for (int i = 0; i < num_of_train_samples; ++i) {
             temp = labels_train[i] - dif[i];
             loss -= labels_train[i]*log(dif[i]) + (1 - labels_train[i])*log(1-dif[i]); // Acelera se trocar por if/else dos labels?
             //printf("%f\n", temp);
@@ -179,19 +188,19 @@ int main(int argc, char *argv[]){
                 right_answers++;
             }
         }
-
+       // printf("%d\n",  num_of_train_samples);
         // Saving metrics to be ploted later
-        accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
+        accuracies[epochs] = ((float) right_answers) / num_of_train_samples;
         losses[epochs] = loss;
 //        printf("%f\n", loss);
-        //printf("%f\n", ((float) right_answers) / TRAINING_SAMPLES*100);
+        //printf("%f\n", ((float) right_answers) / num_of_train_samples*100);
 
         for (int i = 0; i < NUM_PIXELS; ++i)
         {
             gradient[i] = 0;
         }
         // Compute the gradient
-        for (long r=0; r<TRAINING_SAMPLES; r++){
+        for (long r=0; r<num_of_train_samples; r++){
             aux = hypothesis[r];
             r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
@@ -262,24 +271,30 @@ int main(int argc, char *argv[]){
     test_accuracy = ((float) (tp + tn))/ TEST_SAMPLES;
     precision = ((float) tp) / (tp+fp);
     recall = ((float) tp) / (tp + fn);
-    fone = 2*((precision*recall) / (precision + recall));
-     printf("%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
+    fone = (float) 2*((precision*recall) / (precision + recall));
 
+    printf("accuracy  %f\nprecision  %f\nrecall %f\nf1 %f\n", test_accuracy, precision, recall, fone);
 
-    // Write data to files
+   /* // Write data to files
     FILE* facc = fopen("training_acc.txt", "w");
     FILE* floss = fopen("loss.txt", "w");
     FILE* ftest = fopen("test_metrics.txt", "w");
+
+    if(facc != NULL && floss != NULL && ftest != NULL) {
 
    for (int i = 0; i < num_of_epochs; ++i)
     {
         fprintf(facc, "%f\n", accuracies[i]);
         fprintf(floss, "%f\n", losses[i]);
     }
+        fprintf(ftest, "accuracy  %f\nprecision  %f\nrecall %f\nf1 %f\n", test_accuracy, precision, recall, fone);
 
-    fprintf(ftest, "%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
+
+    //printf("%d\n",  num_of_train_samples);
 
     fclose(facc);
     fclose(floss);
-    fclose(ftest);
+    fclose(ftest);}
+*/
+    
 }
