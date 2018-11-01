@@ -156,6 +156,7 @@ int main(int argc, char *argv[]){
             // Compute the difference between label and hypothesis &
             //  accuracy on training set & loss function
             temp = labels_train[r] - hypothesis[r];
+            // Precisa de semáforo em loss. Ou cada um tem sua loss e no final soma as losses.
             loss -= labels_train[r]*log(hypothesis[r]) + (1 - labels_train[r])*log(1-hypothesis[r]); // Acelera se trocar por if/else dos labels?
             //printf("%f\n", temp);
             hypothesis[r] = temp;
@@ -176,6 +177,7 @@ int main(int argc, char *argv[]){
             }
 
             // Compute current gradient
+            // Precisa de semáforo em gradiente
             aux = hypothesis[r];
             r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
