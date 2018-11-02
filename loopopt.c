@@ -150,6 +150,7 @@ int main(int argc, char *argv[]){
         }
 
         // Generate hypothesis values for each sample
+        //  #pragma omp parallel for private(temp) reduction(-:loss)
         for (long r=0; r<TRAINING_SAMPLES; r++){
             r_numpixels = r*NUM_PIXELS;
             temp = 0;
@@ -162,9 +163,10 @@ int main(int argc, char *argv[]){
             
             // Compute the difference between label and hypothesis &
             //  accuracy on training set & loss function
-            temp = labels_train[r] - hypothesis[r];
+            temp = labels_train[r]*log(hypothesis[r]) + (1 - labels_train[r])*log(1-hypothesis[r]);
             // Precisa de semáforo em loss. Ou cada um tem sua loss e no final soma as losses.
-            loss -= labels_train[r]*log(hypothesis[r]) + (1 - labels_train[r])*log(1-hypothesis[r]); // Acelera se trocar por if/else dos labels?
+            printf("%f\n", temp);
+            loss -= temp; // Acelera se trocar por if/else dos labels?
             hypothesis[r] = temp;
 
             if (temp < 0){
