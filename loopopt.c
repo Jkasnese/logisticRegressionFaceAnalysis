@@ -6,11 +6,10 @@
 #include<string.h>
 #include<math.h>
 
-#define TOTAL_SAMPLES 12275
-#define TRAINING_SAMPLES 9795
-#define TEST_SAMPLES 2480
-#define NUM_PIXELS 2305 // Num pixels + 1 (bias)
-#define NUM_EPOCHS 500
+#define TOTAL_SAMPLES 5481
+#define TRAINING_SAMPLES 4487
+#define TEST_SAMPLES 994
+#define NUM_PIXELS 16385 // Num pixels + 1 (bias)
 
 const float learning_rate = 0.01;
 
@@ -18,95 +17,91 @@ int main(int argc, char *argv[]){
 
     int num_of_epochs = atoi(argv[1]);
 
-
-    char filename[] = "fer2013.csv";
-    int buffer_size = 10000, emotion_6 = 0, emotion_4 = 0;
-    char *charbuffer, *emotion, *usage, *char_pixels, *temp_pixels;
+    char train_filename[] = "fold_training_out.csv", test_filename[] = "fold_test_out.csv";
+    int buffer_size = 100000, gender_female = 0, gender_male = 0;
+    char *charbuffer, *gender, *usage, *char_pixels, *temp_pixels;
     float *training, *test;
     float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
 
     // Metrics holders
     float accuracies[num_of_epochs], losses[num_of_epochs];
-    float test_accuracy, precision, recall, fone;
+    float test_accuracy = 0, precision = 0, recall = 0, fone = 0;
 
-    FILE* FER_images = fopen(filename, "r");
+    FILE* train_images = fopen(train_filename, "r");
+    FILE* test_images = fopen(test_filename, "r");
     int i_train = 0, i_test = 0, i = 0, j = 0;
     int offset = 0;
     int is_training; // 1 == training, 0 == test
 
     charbuffer = (char *)malloc(buffer_size*sizeof(char));
     temp_pixels = (char *)malloc(2*sizeof(float));
-    training = (float *)malloc((TRAINING_SAMPLES * 2305)*sizeof(float));
-    test = (float *)malloc((TEST_SAMPLES * 2305)*sizeof(float));
+    training = (float *)malloc((TRAINING_SAMPLES * NUM_PIXELS)*sizeof(float));
+    test = (float *)malloc((TEST_SAMPLES * NUM_PIXELS)*sizeof(float));
 
+    // Lendo todo o arquivo para teste
+    while(fgets(charbuffer, buffer_size, train_images) != NULL) {
+            gender = strtok(charbuffer, ",");
 
-    // Lendo todo o arquivo para treino
-    while(fgets(charbuffer, buffer_size, FER_images) != NULL) {
-            emotion = strtok(charbuffer, ",");
             char_pixels = strtok(NULL, ",");
-            usage = strtok(NULL, ",");
 
-        
-            if(strcmp(usage, "Training\n") == 0){
-                is_training = 1;
-            }
-            else
-                is_training = 0;
 
-            if (strcmp(emotion, "6") == 0 || strcmp(emotion, "4") == 0){
-                if (strcmp(emotion, "6") == 0){
-                    if(is_training == 1){
-                        labels_train[i_train] = 1;
-                        emotion_6++;
-                    }
-                    else{
-                        labels_test[i_test] = 1;
-                    }
-
+                if (strcmp(gender, "0") == 0){
+                        labels_train[i_train] = 0;
+                        gender_female++;
                 }
                 else{
-                    if(is_training == 1){
-                        labels_train[i_train] = 0;
-                        emotion_4++;
-                    }
-                    else{
-                        labels_test[i_test] = 0;
-                    }
+                        labels_train[i_train] = 1;
+                        gender_male++;
                 }
 
                 temp_pixels = strtok(char_pixels, " ");
 
-                for (j = 0; j < 2304; j++){
+                for (j = 0; j < (NUM_PIXELS-1); j++){
                     pixel = atof(temp_pixels);
-
-                    if(is_training == 1){
-                        offset = i_train*2305 + j;
+                        offset = i_train*NUM_PIXELS + j;
                         training[offset] = pixel/255.0;
-                    }
-                    else{
-                        offset = i_test*2305 + j;
-                        test[offset] = pixel/255.0;
-                    }
 
                     temp_pixels = strtok(NULL, " ");
                 }
 
-                if(is_training == 1){
-
                     training[i_train*NUM_PIXELS + j] = 1;
                     i_train++;
-                    
+          }
+    
+
+    while(fgets(charbuffer, buffer_size, test_images) != NULL) {
+            gender = strtok(charbuffer, ",");
+            char_pixels = strtok(NULL, ",");
+
+
+                if (strcmp(gender, "0") == 0){
+                        labels_test[i_test] = 0;
+                        gender_female++;
                 }
                 else{
+                        labels_test[i_test] = 1;
+                        gender_male++;
+                }
+
+                temp_pixels = strtok(char_pixels, " ");
+
+                for (j = 0; j < (NUM_PIXELS-1); j++){
+                    pixel = atof(temp_pixels);
+
+                        offset = i_test*NUM_PIXELS + j;
+                        test[offset] = pixel/255.0;
+
+                    temp_pixels = strtok(NULL, " ");
+                }
+
                     test[i_test*NUM_PIXELS + j] = 1;
                     i_test++;
-                }
           }
-    }
+    
+    // Arquivos lidos. Fechar arquivos.
+    fclose(train_images);
+    fclose(test_images);
 
-
-    // Arquivo lido. Fechar arquivo.
-    fclose(FER_images);
 
     // Adding bias
 
@@ -133,6 +128,7 @@ int main(int argc, char *argv[]){
     const float update = learning_rate/TRAINING_SAMPLES;
 
     float temp = 0;
+    float aux = 0;
     int right_answers = 0;
     float loss = 0;
 
@@ -150,7 +146,7 @@ int main(int argc, char *argv[]){
         }
 
         // Generate hypothesis values for each sample
-        //  #pragma omp parallel for private(temp) reduction(-:loss)
+        #pragma omp parallel for private(temp, aux) reduction(-:loss)
         for (long r=0; r<TRAINING_SAMPLES; r++){
             r_numpixels = r*NUM_PIXELS;
             temp = 0;
@@ -159,20 +155,23 @@ int main(int argc, char *argv[]){
             }
 
             // Calculate logistic hypothesis
-            hypothesis[r] = 1 / (1 + (exp( -1.0 * temp)) );
-            
-            // Compute the difference between label and hypothesis &
-            //  accuracy on training set & loss function
-            temp = labels_train[r]*log(hypothesis[r]) + (1 - labels_train[r])*log(1-hypothesis[r]);
-            // Precisa de semáforo em loss. Ou cada um tem sua loss e no final soma as losses.
-            printf("%f\n", temp);
-            loss -= temp; // Acelera se trocar por if/else dos labels?
-            hypothesis[r] = temp;
+            temp = 1 / (1 + (exp( -1.0 * temp)) );
 
+            //printf("%f\n", temp);
+            
+            // Compute loss function
+            aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp);
+            // Precisa de semáforo em loss. Ou cada um tem sua loss e no final soma as losses.
+            loss -= aux; // Acelera se trocar por if/else dos labels?
+
+            // Compute the difference between label and hypothesis
+            temp = labels_train[r] - temp;
+
+            // Compute accuracy on training set
             if (temp < 0){
-                temp = temp*-1; //Há como acelerar simplesmente manipulando os bits?
+                aux = aux*-1; //Há como acelerar simplesmente manipulando os bits?
             }
-            if (temp < 0.5){
+            if (aux < 0.5){
                 right_answers++;
             }
 
@@ -189,7 +188,7 @@ int main(int argc, char *argv[]){
         for (int i=0; i<NUM_PIXELS; i++){
             weights[i] += update * gradient[i];
 
-            //printf("%f\n", weights[i]);
+           // printf("%f\n", weights[i]);
         }
 
         // Saving epoch metrics to be ploted later
