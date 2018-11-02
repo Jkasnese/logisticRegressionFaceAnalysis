@@ -117,6 +117,8 @@ int main(int argc, char *argv[]){
 
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
+
+    // Paraleliza
     for (int i=0; i<NUM_PIXELS; i++){
         weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
     }
@@ -132,7 +134,6 @@ int main(int argc, char *argv[]){
 
     float temp = 0;
     int right_answers = 0;
-    float aux;
     float loss = 0;
 
     // BEGINING OF TRAINING EPOCHS
@@ -141,6 +142,12 @@ int main(int argc, char *argv[]){
         // Zeroing epoch stats
         right_answers = 0;
         loss = 0;
+
+        // Zeroing gradients from previous epoch
+        for (int i = 0; i < NUM_PIXELS; ++i)
+        {
+            gradient[i] = 0;
+        }
 
         // Generate hypothesis values for each sample
         for (long r=0; r<TRAINING_SAMPLES; r++){
@@ -158,8 +165,8 @@ int main(int argc, char *argv[]){
             temp = labels_train[r] - hypothesis[r];
             // Precisa de semáforo em loss. Ou cada um tem sua loss e no final soma as losses.
             loss -= labels_train[r]*log(hypothesis[r]) + (1 - labels_train[r])*log(1-hypothesis[r]); // Acelera se trocar por if/else dos labels?
-            //printf("%f\n", temp);
             hypothesis[r] = temp;
+
             if (temp < 0){
                 temp = temp*-1; //Há como acelerar simplesmente manipulando os bits?
             }
@@ -167,25 +174,13 @@ int main(int argc, char *argv[]){
                 right_answers++;
             }
 
-
-            *(hypothesis + r) = temp;
-
-            // Zeroing gradients from previous epoch
-            for (int i = 0; i < NUM_PIXELS; ++i)
-            {
-                gradient[i] = 0;
-            }
-
             // Compute current gradient
             // Precisa de semáforo em gradiente
-            aux = hypothesis[r];
             r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
-                //printf("%f\n", temp);
-                gradient[x] += training[r_numpixels + x] * aux;
+                gradient[x] += training[r_numpixels + x] * temp;
             }
         }
-
 
         // Update weights
         // Paraleliza
@@ -247,7 +242,7 @@ int main(int argc, char *argv[]){
     precision = ((float) tp) / (tp+fp);
     recall = ((float) tp) / (tp + fn);
     fone = 2*((precision*recall) / (precision + recall));
-     printf("%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
+    printf("%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
 
 
     // Write data to files
