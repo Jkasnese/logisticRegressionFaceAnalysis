@@ -11,7 +11,6 @@
 #define TRAINING_SAMPLES 4487
 #define TEST_SAMPLES 994
 #define NUM_PIXELS 16385 // Num pixels + 1 (bias)
-#define NUM_THREADS_USR 4
 
 const float learning_rate = 0.01;
 
@@ -116,7 +115,6 @@ int main(int argc, char *argv[]){
 
 
     // Paraleliza
-    #pragma omp parallel for num_threads(NUM_THREADS_USR)
     for (int i=0; i<NUM_PIXELS; i++){
         weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
     }
@@ -149,7 +147,6 @@ int main(int argc, char *argv[]){
         }
 
         // Generate hypothesis values for each sample
-        #pragma omp parallel for private(temp, aux) reduction(-:loss) num_threads(NUM_THREADS_USR)
         for (long r=0; r<TRAINING_SAMPLES; r++){
             r_numpixels = r*NUM_PIXELS;
             temp = 0;
@@ -173,8 +170,6 @@ int main(int argc, char *argv[]){
             // Compute accuracy on training set
             if (temp < 0){
                 aux = temp*-1; //Há como acelerar simplesmente manipulando os bits?
-            } else {
-                aux = temp;
             }
             if (aux < 0.5){
                 right_answers++;
@@ -208,23 +203,24 @@ int main(int argc, char *argv[]){
 
 
     // Generate hypothesis values
-    #pragma omp parallel for private(temp) num_threads(NUM_THREADS_USR)
+    // Paraleliza
     for (long r=0; r<TEST_SAMPLES; r++){
         r_numpixels = r*NUM_PIXELS;
         temp = 0;
         for (long x=0; x<NUM_PIXELS; x++){
             temp += *(test + r_numpixels+x) * weights[x];
         }
-
+        *(hypothesis + r) = temp;
+        
         // Calculate logistic hypothesis
-        temp = 1 / (1 + (exp( -1.0 * temp)) );
+        hypothesis[r] = 1 / (1 + (exp( -1.0 * temp)) );
 
         // Compute the difference between label and hypothesis &
         //  accuracy on training set &
         //  loss function &
         //  metrics (accuracy, precision, recall, f1)
         if (labels_test[r] == 1.0){
-            if (temp < 0.5){
+            if (hypothesis[r] < 0.5){
                 // FP
                 fp++;
             } else {
@@ -232,7 +228,7 @@ int main(int argc, char *argv[]){
                 tp++;
             }
         } else {
-            if (temp < 0.5){
+            if (hypothesis[r] < 0.5){
                 // TN
                 tn++;
             } else {
