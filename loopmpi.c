@@ -26,124 +26,135 @@
 const float learning_rate = 0.01; /**< Constant that holds the learning rate */
 
 int main(int argc, char *argv[]){
-
+    
+    int rank;
+    
+    MPI_INIT(&argc, &argv); 
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    
     int num_of_epochs = atoi(argv[1]); 
     int num_of_samples = atoi(argv[2]);
     int num_of_nodes = atoi(argv[3]);
     int threads = atoi(argv[4]);
-
+    
+    
     /**
      * - Defines the number of threads to be used by OpenMP for parallelization based on argument provided by the user
     */
     omp_set_num_threads(threads);
-
-    char train_filename[] = "fold_training_out.csv", test_filename[] = "fold_test_out.csv";
-    int buffer_size = 100000, gender_female = 0, gender_male = 0;
-    char *charbuffer, *gender, *usage, *char_pixels, *temp_pixels;
+    
+    // Training/testing variables. Parallel variables.
     float *training, *test;
     float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
-
-    // Metrics holders
+        // Metrics holders
     float accuracies[num_of_epochs], losses[num_of_epochs];
     float test_accuracy = 0, precision = 0, recall = 0, fone = 0;
-
-    FILE* train_images = fopen(train_filename, "r");
-    FILE* test_images = fopen(test_filename, "r");
-    int i_train = 0, i_test = 0, i = 0, j = 0;
-    int offset = 0; 
-    int is_training; // 1 == training, 0 == test
-
-    charbuffer = (char *)malloc(buffer_size*sizeof(char));
-    temp_pixels = (char *)malloc(2*sizeof(float));
+    
     training = (float *)malloc((TRAINING_SAMPLES * NUM_PIXELS)*sizeof(float));
     test = (float *)malloc((TEST_SAMPLES * NUM_PIXELS)*sizeof(float));
-
-    /** - Reads the training data from .csv file and stores the labels and pixel values in arrays */
-    while(fgets(charbuffer, buffer_size, train_images) != NULL) {
-        if(i_train <= num_of_samples){
-            gender = strtok(charbuffer, ",");
-
-            char_pixels = strtok(NULL, ",");
-
-
-                if (strcmp(gender, "0") == 0){
-                        labels_train[i_train] = 0;
-                        gender_female++;
-                }
-                else{
-                        labels_train[i_train] = 1;
-                        gender_male++;
-                }
-
-                temp_pixels = strtok(char_pixels, " ");
-
-                for (j = 0; j < (NUM_PIXELS-1); j++){
-                    pixel = atof(temp_pixels);
-                        offset = i_train*NUM_PIXELS + j;
-                        training[offset] = pixel/255.0;
-
-                    temp_pixels = strtok(NULL, " ");
-                }
-
-                    training[i_train*NUM_PIXELS + j] = 1;
-                    i_train++;
-            }
-            else{
-                break;
-            }
-        }
     
-
-    /** - Reads data from test .csv file and stores the labels and pixel values in arrays */
-    while(fgets(charbuffer, buffer_size, test_images) != NULL) {
-
-            gender = strtok(charbuffer, ",");
-            char_pixels = strtok(NULL, ",");
-
-
-                if (strcmp(gender, "0") == 0){
-                        labels_test[i_test] = 0;
-                        gender_female++;
-                }
-                else{
-                        labels_test[i_test] = 1;
-                        gender_male++;
-                }
-
-                temp_pixels = strtok(char_pixels, " ");
-
-                for (j = 0; j < (NUM_PIXELS-1); j++){
-                    pixel = atof(temp_pixels);
-
-                        offset = i_test*NUM_PIXELS + j;
-                        test[offset] = pixel/255.0;
-
-                    temp_pixels = strtok(NULL, " ");
-                }
-
-                    test[i_test*NUM_PIXELS + j] = 1;
-                    i_test++;
-          }
-    
-    /** - Closes the files after they have been read */
-    fclose(train_images);
-    fclose(test_images);
-
-
-    /** - Generates weight matrix */
+    // Weights
+        /** - Generates weight matrix */
     float* weights;
-
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
-    /** - Parallelizes the loop for initializing weight values */
-    #pragma omp parallel for
-    for (int i=0; i<NUM_PIXELS; i++){
-        weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
-        //if(i % 10 == 0)
-          //   printf("i = %d thread num = %d core = %d\n", i, omp_get_thread_num(), sched_getcpu());
-    }
+    if (rank == 0){
+        // IO variables. Reading file variables.
+        char train_filename[] = "fold_training_out.csv", test_filename[] = "fold_test_out.csv";
+        int buffer_size = 100000, gender_female = 0, gender_male = 0;
+        char *charbuffer, *gender, *usage, *char_pixels, *temp_pixels;
 
+        FILE* train_images = fopen(train_filename, "r");
+        FILE* test_images = fopen(test_filename, "r");
+        int i_train = 0, i_test = 0, i = 0, j = 0;
+        int offset = 0; 
+        int is_training; // 1 == training, 0 == test
+
+        charbuffer = (char *)malloc(buffer_size*sizeof(char));
+        temp_pixels = (char *)malloc(2*sizeof(float));
+
+        /** - Reads the training data from .csv file and stores the labels and pixel values in arrays */
+        while(fgets(charbuffer, buffer_size, train_images) != NULL) {
+            if(i_train <= num_of_samples){
+                gender = strtok(charbuffer, ",");
+
+                char_pixels = strtok(NULL, ",");
+
+
+                    if (strcmp(gender, "0") == 0){
+                            labels_train[i_train] = 0;
+                            gender_female++;
+                    }
+                    else{
+                            labels_train[i_train] = 1;
+                            gender_male++;
+                    }
+
+                    temp_pixels = strtok(char_pixels, " ");
+
+                    for (j = 0; j < (NUM_PIXELS-1); j++){
+                        pixel = atof(temp_pixels);
+                            offset = i_train*NUM_PIXELS + j;
+                            training[offset] = pixel/255.0;
+
+                        temp_pixels = strtok(NULL, " ");
+                    }
+
+                        training[i_train*NUM_PIXELS + j] = 1;
+                        i_train++;
+                }
+                else{
+                    break;
+                }
+            }
+
+
+        /** - Reads data from test .csv file and stores the labels and pixel values in arrays */
+        while(fgets(charbuffer, buffer_size, test_images) != NULL) {
+
+                gender = strtok(charbuffer, ",");
+                char_pixels = strtok(NULL, ",");
+
+
+                    if (strcmp(gender, "0") == 0){
+                            labels_test[i_test] = 0;
+                            gender_female++;
+                    }
+                    else{
+                            labels_test[i_test] = 1;
+                            gender_male++;
+                    }
+
+                    temp_pixels = strtok(char_pixels, " ");
+
+                    for (j = 0; j < (NUM_PIXELS-1); j++){
+                        pixel = atof(temp_pixels);
+
+                            offset = i_test*NUM_PIXELS + j;
+                            test[offset] = pixel/255.0;
+
+                        temp_pixels = strtok(NULL, " ");
+                    }
+
+                        test[i_test*NUM_PIXELS + j] = 1;
+                        i_test++;
+              }
+
+        /** - Closes the files after they have been read */
+        fclose(train_images);
+        fclose(test_images);
+
+
+        /** - Parallelizes the loop for initializing weight values */
+        #pragma omp parallel for
+        for (int i=0; i<NUM_PIXELS; i++){
+            weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
+            //if(i % 10 == 0)
+              //   printf("i = %d thread num = %d core = %d\n", i, omp_get_thread_num(), sched_getcpu());
+        }
+    }
     // BROADCAST dos pesos - MPI
+    MPI_Bcast(weights, NUM_PIXELS, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
     // Generate array to hold hypothesis results:
     float* hypothesis;
@@ -160,18 +171,30 @@ int main(int argc, char *argv[]){
     float loss = 0;
     int *displs, *sendcounts;
     int remainder = 0, count = 0;
+    int num_of_training_imgs; 
 
-    displs = (int *) malloc(num_of_nodes*sizeof(int));
-    sendcounts = (int *) malloc(num_of_nodes*sizeof(int));
+    aux = num_of_samples/num_of_nodes;
+    
+    if(rank == 0){
+        displs = (int *) malloc(num_of_nodes*sizeof(int));
+        sendcounts = (int *) malloc(num_of_nodes*sizeof(int));
 
-    // Dividindo a quantidade de imagens. MPI. num_of_samples % nodes
-    sendcounts[0] = num_of_samples/nodes + num_of_samples % nodes;
-    for(int i=1; i<num_of_nodes; i++){
-        sendcounts[i] = num_of_samples/nodes;
+        // Dividindo a quantidade de imagens. MPI. num_of_samples % nodes
+        num_of_training_imgs = num_of_samples/num_of_nodes + num_of_samples % num_of_nodes;
+        displs[0] = num_of_samples;
+        sendcounts[0] = aux;
+        temp = num_of_samples;
+        for(int i=1; i<num_of_nodes-1; i++){
+            sendcounts[i] = aux;
+            temp += aux;
+            displs[i] = temp;
+        }
+    } else {
+        num_of_training_imgs = aux;
     }
-
-    MPI_Scatterv();
-
+    
+    MPI_Scatterv(training, sendcounts, displs, MPI_FLOAT, training, aux, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        
     // BEGINING OF TRAINING EPOCHS
     int r_numpixels;
     for (int epochs=0; epochs<num_of_epochs; epochs++){
@@ -188,7 +211,7 @@ int main(int argc, char *argv[]){
         /** - Parallelizes generation of hypothesis values for each sample */
         // MPI - cada nó tem um número de amostras diferentes. 
         #pragma omp parallel for private(temp, aux) reduction(-:loss) 
-        for (long r=0; r<num_of_samples; r++){
+        for (long r=0; r<num_of_training_imgs; r++){
             r_numpixels = r*NUM_PIXELS;
             temp = 0;
             for (long x=0; x<NUM_PIXELS; x++){
