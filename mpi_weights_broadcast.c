@@ -247,20 +247,21 @@ int main(int argc, char *argv[]){
         // MPI - Reduce loss & gradient
         MPI_Reduce(loss, loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        MPI_Allreduce(gradient, gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Reduce(gradient, gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        /** - Updates weights */
-        for (int i=0; i<NUM_PIXELS; i++){
-            weights[i] += update * gradient[i];
-        }
+        if (rank == 0 ){
+            /** - Updates weights */
+            for (int i=0; i<NUM_PIXELS; i++){
+                weights[i] += update * gradient[i];
+            }
 
-        /** - Saves epoch metrics to be plotted later */
-        if (rank == 0){
+            /** - Saves epoch metrics to be plotted later */
             accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
             losses[epochs] = loss;
         }
 
         // MPI - Broadcast weights ()
+        MPI_Bcast(weights, NUM_PIXELS, MPI_FLOAT, 0, MPI_COMM_WORLD);
     }
 
     // CALCULATE TEST METRICS

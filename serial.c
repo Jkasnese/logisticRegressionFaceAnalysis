@@ -113,8 +113,6 @@ int main(int argc, char *argv[]){
 
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
-
-    // Paraleliza
     for (int i=0; i<NUM_PIXELS; i++){
         weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
     }
@@ -184,7 +182,6 @@ int main(int argc, char *argv[]){
         }
 
         // Update weights
-        // Paraleliza
         for (int i=0; i<NUM_PIXELS; i++){
             weights[i] += update * gradient[i];
 
@@ -203,7 +200,6 @@ int main(int argc, char *argv[]){
 
 
     // Generate hypothesis values
-    // Paraleliza
     for (long r=0; r<TEST_SAMPLES; r++){
         r_numpixels = r*NUM_PIXELS;
         temp = 0;

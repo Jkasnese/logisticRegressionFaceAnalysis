@@ -114,8 +114,6 @@ int main(int argc, char *argv[]){
 
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
 
-
-    // Paraleliza
     #pragma omp parallel for num_threads(NUM_THREADS_USR)
     for (int i=0; i<NUM_PIXELS; i++){
         weights[i] =  ( (rand() % 100) / 146.0) - 0.35; //>> 2 fica quanto mais rápido?
@@ -157,7 +155,7 @@ int main(int argc, char *argv[]){
                 temp += *(training + (r_numpixels)+x) * *(weights + x);
             }
 
-            // Calculate logistic hypothesis
+            // Calculate logistic hypot4487hesis
             temp = 1 / (1 + (exp( -1.0 * temp)) );
 
             //printf("%f\n", temp);
@@ -188,8 +186,7 @@ int main(int argc, char *argv[]){
             }
         }
 
-        // Update weights
-        // Paraleliza
+        #pragma omp parallel for
         for (int i=0; i<NUM_PIXELS; i++){
             weights[i] += update * gradient[i];
 
