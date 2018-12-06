@@ -29,7 +29,7 @@ int main(int argc, char *argv[]){
     
     int rank;
     
-    MPI_INIT(&argc, &argv); 
+    MPI_Init(&argc, &argv); 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
     int num_of_epochs = atoi(argv[1]); 
@@ -184,7 +184,7 @@ int main(int argc, char *argv[]){
         displs[0] = num_of_samples;
         sendcounts[0] = aux;
         temp = num_of_samples;
-        for(int i=1; i<num_of_nodes-1; i++){
+        for(int i=1; i<num_of_nodes; i++){
             sendcounts[i] = aux;
             temp += aux;
             displs[i] = temp;
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]){
     }
     
     MPI_Scatterv(training, sendcounts, displs, MPI_FLOAT, training, aux, MPI_FLOAT, 0, MPI_COMM_WORLD);
-        
+
     // BEGINING OF TRAINING EPOCHS
     int r_numpixels;
     for (int epochs=0; epochs<num_of_epochs; epochs++){
@@ -245,9 +245,15 @@ int main(int argc, char *argv[]){
 
         // 2 modos de fazer: reduce + broadcast dos pesos ou reduce + broadcast dos gradientes (allreduce)
         // MPI - Reduce loss & gradient
-        MPI_Reduce(loss, loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        if(rank == 0)
+            MPI_Reduce(MPI_IN_PLACE, &loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        else
+            MPI_Reduce(&loss, NULL, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        MPI_Reduce(gradient, gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        if(rank == 0)
+            MPI_Reduce(MPI_IN_PLACE, &gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        else
+            MPI_Reduce(&gradient, NULL, NUM_PIXELS, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
         if (rank == 0 ){
             /** - Updates weights */
@@ -270,6 +276,7 @@ int main(int argc, char *argv[]){
     int fp = 0, tp = 0, tn = 0, fn = 0;
 
 
+    if(rank == 0){
     /** - Generate hypothesis values for the test set */
     #pragma omp parallel for private(temp)
     for (long r=0; r<TEST_SAMPLES; r++){
@@ -328,4 +335,7 @@ int main(int argc, char *argv[]){
     fclose(facc);
     fclose(floss);
     fclose(ftest);
+}
+
+    MPI_Finalize();
 }
