@@ -169,6 +169,7 @@ int main(int argc, char *argv[]){
     float aux = 0;
     int right_answers = 0;
     float loss = 0;
+    float global_loss = 0;
     int *displs, *sendcounts;
     int remainder = 0, count = 0;
     int num_of_training_imgs; 
@@ -177,6 +178,7 @@ int main(int argc, char *argv[]){
  
 
     if(rank == 0){
+
         displs = (int *) malloc(num_of_nodes*sizeof(int));
         sendcounts = (int *) malloc(num_of_nodes*sizeof(int));
 
@@ -246,12 +248,7 @@ int main(int argc, char *argv[]){
 
         // 2 modos de fazer: reduce + broadcast dos pesos ou reduce + broadcast dos gradientes (allreduce)
         // MPI - Reduce loss & gradient
-        if(rank == 0)
-            MPI_Reduce(MPI_IN_PLACE, &loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-        else 
-            MPI_Reduce(&loss, NULL, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-        
+        MPI_Reduce(&loss, &global_loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
         MPI_Allreduce(MPI_IN_PLACE, &gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
@@ -269,70 +266,73 @@ int main(int argc, char *argv[]){
         // MPI - Broadcast weights ()
     }
 
-    // CALCULATE TEST METRICS
-    // Zeroing variables to hold metrics stats:
-    right_answers = 0;
-    int fp = 0, tp = 0, tn = 0, fn = 0;
+    if (rank==0){
+
+        // CALCULATE TEST METRICS
+        // Zeroing variables to hold metrics stats:
+        right_answers = 0;
+        int fp = 0, tp = 0, tn = 0, fn = 0;
 
 
-    /** - Generate hypothesis values for the test set */
-    #pragma omp parallel for private(temp)
-    for (long r=0; r<TEST_SAMPLES; r++){
-        r_numpixels = r*NUM_PIXELS;
-        temp = 0;
-        for (long x=0; x<NUM_PIXELS; x++){
-            temp += *(test + r_numpixels+x) * weights[x];
-        }
-        
-        // Calculate logistic hypothesis
-        temp = 1 / (1 + (exp( -1.0 * temp)) );
-
-        // Compute the difference between label and hypothesis &
-        //  accuracy on training set &
-        //  loss function &
-        //  metrics (accuracy, precision, recall, f1)
-        if (labels_test[r] == 1.0){
-            if (temp < 0.5){
-                // FP
-                fp++;
-            } else {
-                // TP
-                tp++;
+        /** - Generate hypothesis values for the test set */
+        #pragma omp parallel for private(temp)
+        for (long r=0; r<TEST_SAMPLES; r++){
+            r_numpixels = r*NUM_PIXELS;
+            temp = 0;
+            for (long x=0; x<NUM_PIXELS; x++){
+                temp += *(test + r_numpixels+x) * weights[x];
             }
-        } else {
-            if (temp < 0.5){
-                // TN
-                tn++;
+            
+            // Calculate logistic hypothesis
+            temp = 1 / (1 + (exp( -1.0 * temp)) );
+
+            // Compute the difference between label and hypothesis &
+            //  accuracy on training set &
+            //  loss function &
+            //  metrics (accuracy, precision, recall, f1)
+            if (labels_test[r] == 1.0){
+                if (temp < 0.5){
+                    // FP
+                    fp++;
+                } else {
+                    // TP
+                    tp++;
+                }
             } else {
-                // FN
-                fn++;
+                if (temp < 0.5){
+                    // TN
+                    tn++;
+                } else {
+                    // FN
+                    fn++;
+                }
             }
         }
+
+        test_accuracy = ((float) (tp + tn))/ TEST_SAMPLES;
+        precision = ((float) tp) / (tp+fp);
+        recall = ((float) tp) / (tp + fn);
+        fone = 2*((precision*recall) / (precision + recall));
+        printf("%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
+
+
+        /** - Writes metrics (accuracy, loss, precision, recall and F1 score) to files */ 
+        FILE* facc = fopen("training_acc.txt", "w");
+        FILE* floss = fopen("loss.txt", "w");
+        FILE* ftest = fopen("test_metrics.txt", "w");
+
+       for (int i = 0; i < num_of_epochs; ++i)
+        {
+            fprintf(facc, "%f\n", accuracies[i]);
+            fprintf(floss, "%f\n", losses[i]);
+        }
+
+        fprintf(ftest, "%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
+
+        fclose(facc);
+        fclose(floss);
+        fclose(ftest);
     }
-
-    test_accuracy = ((float) (tp + tn))/ TEST_SAMPLES;
-    precision = ((float) tp) / (tp+fp);
-    recall = ((float) tp) / (tp + fn);
-    fone = 2*((precision*recall) / (precision + recall));
-    printf("%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
-
-
-    /** - Writes metrics (accuracy, loss, precision, recall and F1 score) to files */ 
-    FILE* facc = fopen("training_acc.txt", "w");
-    FILE* floss = fopen("loss.txt", "w");
-    FILE* ftest = fopen("test_metrics.txt", "w");
-
-   for (int i = 0; i < num_of_epochs; ++i)
-    {
-        fprintf(facc, "%f\n", accuracies[i]);
-        fprintf(floss, "%f\n", losses[i]);
-    }
-
-    fprintf(ftest, "%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
-
-    fclose(facc);
-    fclose(floss);
-    fclose(ftest);
 
     MPI_Finalize();
 }
