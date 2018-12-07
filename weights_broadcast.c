@@ -31,8 +31,6 @@ nohup mpirun -np 3 -machinefile machines.txt loopmpi.out 50 4487 3 1   - (epoch)
 const float learning_rate = 0.01; /**< Constant that holds the learning rate */
 
 int main(int argc, char *argv[]){
-
-    // clock();
     
     int rank;
     
@@ -64,8 +62,6 @@ int main(int argc, char *argv[]){
         /** - Generates weight matrix */
     float* weights;
     weights = (float *)malloc(NUM_PIXELS*sizeof(float));
-
-    // clock();
 
     if (rank == 0){
         // IO variables. Reading file variables.
@@ -153,7 +149,6 @@ int main(int argc, char *argv[]){
         fclose(train_images);
         fclose(test_images);
 
-        // clock();
 
         /** - Parallelizes the loop for initializing weight values */
         #pragma omp parallel for
@@ -163,13 +158,8 @@ int main(int argc, char *argv[]){
               //   printf("i = %d thread num = %d core = %d\n", i, omp_get_thread_num(), sched_getcpu());
         }
     }
-
-    // clock();
-
     // BROADCAST dos pesos - MPI
     MPI_Bcast(weights, NUM_PIXELS, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-    // clock();
 
     // Generate array to hold hypothesis results:
     float* hypothesis;
@@ -213,12 +203,8 @@ int main(int argc, char *argv[]){
     } else {
         num_of_training_imgs = aux;
     }
-
-    // clock();
     
     MPI_Scatterv(training, sendcounts, displs, MPI_FLOAT, training, aux, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-    // clock();
          
     // BEGINING OF TRAINING EPOCHS
     int r_numpixels;
@@ -268,32 +254,27 @@ int main(int argc, char *argv[]){
             }
         }
 
-        // clock();
-
         // 2 modos de fazer: reduce + broadcast dos pesos ou reduce + broadcast dos gradientes (allreduce)
         // MPI - Reduce loss & gradient
         MPI_Reduce(&loss, &global_loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        MPI_Allreduce(gradient, global_gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-
-        // clock();
-
-        /** - Updates weights */
-        for (int i=0; i<NUM_PIXELS; i++){
-            weights[i] += update * global_gradient[i];
-        }
+        MPI_Reduce(gradient, global_gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
         /** - Saves epoch metrics to be plotted later */
         if (rank == 0){
+            /** - Updates weights */
+            for (int i=0; i<NUM_PIXELS; i++){
+                weights[i] += update * global_gradient[i];
+            }
+
             accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
             losses[epochs] = global_loss;
         }
 
-        // clock();
         // MPI - Broadcast weights ()
+        MPI_Bcast(weights, NUM_PIXELS, MPI_FLOAT, 0, MPI_COMM_WORLD);
     }
 
-// clock();
     if (rank==0){
 
         // CALCULATE TEST METRICS
@@ -341,9 +322,6 @@ int main(int argc, char *argv[]){
         precision = ((float) tp) / (tp+fp);
         recall = ((float) tp) / (tp + fn);
         fone = 2*((precision*recall) / (precision + recall));
-
-        // clock();
-
         printf("%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
 
 
@@ -364,8 +342,6 @@ int main(int argc, char *argv[]){
         fclose(floss);
         fclose(ftest);
     }
-
-    // clock();
 
     MPI_Finalize();
 }
