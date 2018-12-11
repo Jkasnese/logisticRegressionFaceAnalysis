@@ -8,7 +8,7 @@
 
 scp to umbu.uefs.br (172.16.112.7)
 mpicc -o loopmpi.out loopmpi.c -std=c99 -fopenmp -lm     
-    nohup mpirun -np 3 -machinefile machines.txt loopmpi.out 50 4487 3 1   - (epoch) (samples) (number of processes) (number of threads (OpenMP)).
+nohup mpirun -np 3 -machinefile machines.txt loopmpi.out 50 4487 3 1   - (epoch) (samples) (number of processes) (number of threads (OpenMP)).
 
  */
 #define _GNU_SOURCE
@@ -83,7 +83,6 @@ int main(int argc, char *argv[]){
     float temp = 0;
     float aux = 0;
     int right_answers = 0;
-    float global_right_answers = 0;
     float loss = 0;
     float global_loss = 0;
     int *displs, *sendcounts;
@@ -279,8 +278,6 @@ int main(int argc, char *argv[]){
         // MPI - Reduce loss & gradient
         MPI_Reduce(&loss, &global_loss, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        MPI_Reduce(&right_answers, &global_right_answers, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-
         MPI_Allreduce(gradient, global_gradient, NUM_PIXELS, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
         end_reduce_time = MPI_Wtime(); // clock();
@@ -292,20 +289,21 @@ int main(int argc, char *argv[]){
 
         /** - Saves epoch metrics to be plotted later */
         if (rank == 0){
-            accuracies[epochs] = ((float) global_right_answers) / TRAINING_SAMPLES;
+            accuracies[epochs] = ((float) right_answers) / TRAINING_SAMPLES;
             losses[epochs] = global_loss;
         }
 
     }
 
     training_time = MPI_Wtime();    // clock();
+
+
     if (rank==0){
 
         // CALCULATE TEST METRICS
         // Zeroing variables to hold metrics stats:
         right_answers = 0;
         int fp = 0, tp = 0, tn = 0, fn = 0;
-
 
         /** - Generate hypothesis values for the test set */
         #pragma omp parallel for private(temp)
@@ -372,7 +370,6 @@ int main(int argc, char *argv[]){
 
     files_time = MPI_Wtime(); // clock();
 
-
     if (rank == 0){
 
         FILE* execution_times = fopen("execution_times", "w");
@@ -384,11 +381,11 @@ int main(int argc, char *argv[]){
         fprintf(execution_times, "%s\t%0.9f\n", "divide_imgs_time: ", (divide_imgs_time - bcast_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "scatter_time: ", (scatter_time - divide_imgs_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "reduce+allreduce_time: ", (end_reduce_time - start_reduce_time) );
-        fprintf(execution_times, "%s\t%0.9f\n", "Training time: ", (training_time - scatter_time) );
+        fprintf(execution_times, "%s\t%0.9f\n", "Training time: ", (scatter_time - training_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "Test time: ", (test_time - training_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "files_time ", (files_time - test_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "Total time: ", (files_time - start_time) );
     }
-
+    
     MPI_Finalize();
 }
