@@ -207,13 +207,11 @@ int main(int argc, char *argv[]){
 
         // Dividindo a quantidade de imagens. MPI. num_of_samples % nodes
         num_of_training_imgs = num_of_samples/num_of_nodes + (num_of_samples % num_of_nodes);
-        displs[0] = num_of_samples;
-        sendcounts[0] = aux;
-        temp = num_of_samples;
+        displs[0] = 0; // acho que é 0, não? Antes tava num_of_samples
+        sendcounts[0] = num_of_training_imgs;
         for(int i=1; i<num_of_nodes; i++){
             sendcounts[i] = aux;
-            temp += aux;
-            displs[i] = temp;
+            displs[i] = aux*i;
         }
     } else {
         num_of_training_imgs = aux;
@@ -292,7 +290,7 @@ int main(int argc, char *argv[]){
 
         /** - Saves epoch metrics to be plotted later */
         if (rank == 0){
-            accuracies[epochs] = ((float) global_right_answers) / TRAINING_SAMPLES;
+            accuracies[epochs] = ((float) global_right_answers) / num_of_samples;
             losses[epochs] = global_loss;
         }
 
@@ -376,6 +374,7 @@ int main(int argc, char *argv[]){
     if (rank == 0){
 
         FILE* execution_times = fopen("execution_times", "w");
+        FILE* total_time = fopen("total_time", "w");
 
         fprintf(execution_times, "%s\t%0.9f\n", "memory_allocation_time: ", (malloc_time - start_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "Setup Serial time: ", (setup_time - start_time) );
@@ -388,6 +387,8 @@ int main(int argc, char *argv[]){
         fprintf(execution_times, "%s\t%0.9f\n", "Test time: ", (test_time - training_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "files_time ", (files_time - test_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "Total time: ", (files_time - start_time) );
+
+        fprintf(total_time, "%0.9f\n", (files_time - start_time));
     }
 
     MPI_Finalize();
