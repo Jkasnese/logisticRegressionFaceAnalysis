@@ -52,17 +52,27 @@ int main(int argc, char *argv[]){
      * - Defines the number of threads to be used by OpenMP for parallelization based on argument provided by the user
     */
     omp_set_num_threads(threads);
-    
-    // Training/testing variables. Parallel variables.
-    float *training, *test;
-    float labels_train[TRAINING_SAMPLES], labels_test[TEST_SAMPLES], pixel;
-        // Metrics holders
-    float accuracies[num_of_epochs], losses[num_of_epochs];
+
+    // Calculating how many samples to each process, to allocate correct amount of memory 
+    int num_samples_each;
+    num_samples_each = num_of_samples/num_of_nodes;
+
+    // Training/testing variables. Root variables
+    float *training, *test, *labels_train, *labels_test;
+    float* global_gradient;
+    float global_right_answers = 0;
+    float global_loss = 0;
+    int *displs, *sendcounts;
+
+    float *accuracies, *losses;
     float test_accuracy = 0, precision = 0, recall = 0, fone = 0;
-    
-    training = (float *)malloc((TRAINING_SAMPLES * NUM_PIXELS)*sizeof(float));
-    test = (float *)malloc((TEST_SAMPLES * NUM_PIXELS)*sizeof(float));
-    
+
+    // Training variables. Parallel variables.
+    float *rec_training;
+    float rec_labels_train[num_samples_each+(num_of_nodes-1)];
+
+    rec_training = (float *)malloc(( (num_samples_each+ (num_of_nodes-1)) * NUM_PIXELS)*sizeof(float));
+
     // Weights
         /** - Generates weight matrix */
     float* weights;
@@ -70,30 +80,40 @@ int main(int argc, char *argv[]){
 
     // Generate array to hold hypothesis results:
     float* hypothesis;
-    hypothesis = (float *) malloc (TRAINING_SAMPLES*sizeof(float));
+    hypothesis = (float *) malloc (num_of_samples*sizeof(float));
 
     float* gradient;
     gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
 
-    float* global_gradient;
-    global_gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
-
-    const float update = learning_rate/TRAINING_SAMPLES;
+    const float update = learning_rate/num_of_samples;
 
     float temp = 0;
     float aux = 0;
     int right_answers = 0;
-    float global_right_answers = 0;
+    
     float loss = 0;
-    float global_loss = 0;
-    int *displs, *sendcounts;
-    int remainder = 0, count = 0;
+    
     int num_of_training_imgs; 
+
 
     // clock();
     malloc_time = MPI_Wtime();
 
     if (rank == 0){
+        // Training variables for root:
+        float pixel;
+            // Metrics holders
+        accuracies = (float *)malloc((num_of_epochs)*sizeof(float));
+        losses = (float *)malloc((num_of_epochs)*sizeof(float));
+        
+        training = (float *)malloc((num_of_samples * NUM_PIXELS)*sizeof(float));
+        test = (float *)malloc((TEST_SAMPLES * NUM_PIXELS)*sizeof(float));
+
+        labels_train = (float *)malloc((num_of_samples)*sizeof(float));
+        labels_test = (float *)malloc((TEST_SAMPLES)*sizeof(float));
+        
+        global_gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
+
         // IO variables. Reading file variables.
         char train_filename[] = "fold_training_out.csv", test_filename[] = "fold_test_out.csv";
         int buffer_size = 100000, gender_female = 0, gender_male = 0;
@@ -197,31 +217,45 @@ int main(int argc, char *argv[]){
 
     bcast_time = MPI_Wtime();    // clock();
 
-    aux = num_of_samples/num_of_nodes;
- 
-
     if(rank == 0){
+
+        printf("%f %f %f\n",training[0], training[num_samples_each], training[num_samples_each*2]);
+        printf("%f %f %f\n", labels_train[0], labels_train[num_samples_each], labels_train[num_samples_each*2]);
 
         displs = (int *) malloc(num_of_nodes*sizeof(int));
         sendcounts = (int *) malloc(num_of_nodes*sizeof(int));
 
         // Dividindo a quantidade de imagens. MPI. num_of_samples % nodes
-        num_of_training_imgs = num_of_samples/num_of_nodes + (num_of_samples % num_of_nodes);
+        num_of_training_imgs = num_samples_each + (num_of_samples % num_of_nodes);
         displs[0] = 0; // acho que é 0, não? Antes tava num_of_samples
         sendcounts[0] = num_of_training_imgs;
         for(int i=1; i<num_of_nodes; i++){
-            sendcounts[i] = aux;
-            displs[i] = aux*i;
+            sendcounts[i] = num_samples_each;
+            displs[i] = (num_samples_each*i) + (num_of_samples % num_of_nodes);
         }
     } else {
-        num_of_training_imgs = aux;
+        num_of_training_imgs = num_samples_each;
     }
+
+
 
     divide_imgs_time = MPI_Wtime(); // clock();
     
-    MPI_Scatterv(training, sendcounts, displs, MPI_FLOAT, training, aux, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(training, sendcounts, displs, MPI_FLOAT, rec_training, num_samples_each+2, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(labels_train, sendcounts, displs, MPI_FLOAT, rec_labels_train, num_samples_each+2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
     scatter_time = MPI_Wtime(); // clock();
+
+
+    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 0: ", rec_training[0]);
+    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 1: ", rec_training[num_samples_each]);
+    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 2: ", rec_training[num_samples_each+1]);
+    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 2: ", rec_training[num_samples_each+2]);
+
+    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 0: ", rec_labels_train[0]);
+    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 1: ", rec_labels_train[num_samples_each]);
+    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 2: ", rec_labels_train[num_samples_each+1]);
+    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 2: ", rec_labels_train[num_samples_each+2]);
          
     // BEGINING OF TRAINING EPOCHS
     int r_numpixels;
