@@ -59,7 +59,6 @@ int main(int argc, char *argv[]){
 
     // Training/testing variables. Root variables
     float *training, *test, *labels_train, *labels_test;
-    float* global_gradient;
     float global_right_answers = 0;
     float global_loss = 0;
     int *displs, *sendcounts;
@@ -68,10 +67,10 @@ int main(int argc, char *argv[]){
     float test_accuracy = 0, precision = 0, recall = 0, fone = 0;
 
     // Training variables. Parallel variables.
-    float *rec_training;
-    float rec_labels_train[num_samples_each+(num_of_nodes-1)];
+    float *rec_training, *rec_labels_train;
 
     rec_training = (float *)malloc(( (num_samples_each+ (num_of_nodes-1)) * NUM_PIXELS)*sizeof(float));
+    rec_labels_train = (float *)malloc(( (num_samples_each + (num_of_nodes-1)))*sizeof(float));
 
     // Weights
         /** - Generates weight matrix */
@@ -84,6 +83,9 @@ int main(int argc, char *argv[]){
 
     float* gradient;
     gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
+
+    float *global_gradient;
+    global_gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
 
     const float update = learning_rate/num_of_samples;
 
@@ -112,8 +114,6 @@ int main(int argc, char *argv[]){
         labels_train = (float *)malloc((num_of_samples)*sizeof(float));
         labels_test = (float *)malloc((TEST_SAMPLES)*sizeof(float));
         
-        global_gradient = (float *) malloc (NUM_PIXELS*sizeof(float));
-
         // IO variables. Reading file variables.
         char train_filename[] = "fold_training_out.csv", test_filename[] = "fold_test_out.csv";
         int buffer_size = 100000, gender_female = 0, gender_male = 0;
@@ -219,9 +219,6 @@ int main(int argc, char *argv[]){
 
     if(rank == 0){
 
-        printf("%f %f %f\n",training[0], training[num_samples_each], training[num_samples_each*2]);
-        printf("%f %f %f\n", labels_train[0], labels_train[num_samples_each], labels_train[num_samples_each*2]);
-
         displs = (int *) malloc(num_of_nodes*sizeof(int));
         sendcounts = (int *) malloc(num_of_nodes*sizeof(int));
 
@@ -245,17 +242,6 @@ int main(int argc, char *argv[]){
     MPI_Scatterv(labels_train, sendcounts, displs, MPI_FLOAT, rec_labels_train, num_samples_each+2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
     scatter_time = MPI_Wtime(); // clock();
-
-
-    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 0: ", rec_training[0]);
-    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 1: ", rec_training[num_samples_each]);
-    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 2: ", rec_training[num_samples_each+1]);
-    printf("%s %d %s %f\n", "Process n: ", rank, "Training data 2: ", rec_training[num_samples_each+2]);
-
-    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 0: ", rec_labels_train[0]);
-    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 1: ", rec_labels_train[num_samples_each]);
-    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 2: ", rec_labels_train[num_samples_each+1]);
-    printf("%s %d %s %f\n", "Process n: ", rank, "Labels data 2: ", rec_labels_train[num_samples_each+2]);
          
     // BEGINING OF TRAINING EPOCHS
     int r_numpixels;
@@ -272,18 +258,18 @@ int main(int argc, char *argv[]){
 
         /** - Parallelizes generation of hypothesis values for each sample */
         // MPI - cada nó tem um número de amostras diferentes. 
-        #pragma omp parallel for private(temp, aux) reduction(+:loss) 
+        #pragma omp parallel for private(temp, aux) reduction(+:loss, right_answers) 
         for (long r=0; r<num_of_training_imgs; r++){
             r_numpixels = r*NUM_PIXELS;
             temp = 0;
             for (long x=0; x<NUM_PIXELS; x++){
-                temp += *(training + (r_numpixels)+x) * *(weights + x);
+                temp += *(rec_training + (r_numpixels)+x) * *(weights + x);
             }
             /** - Calculates logistic hypothesis */
             temp = 1 / (1 + (exp( -1.0 * temp)) );
 
             /** - Computes accuracy on training set */
-            if (labels_train[r] == 0){
+            if (rec_labels_train[r] == 0.0){
                 if (temp < 0.5)
                     right_answers++;
             } else {
@@ -292,16 +278,20 @@ int main(int argc, char *argv[]){
             }
 
             /** - Computes loss function */
-            aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp);
+            aux = rec_labels_train[r]*log(temp) + (1 - rec_labels_train[r])*log(1-temp);
             loss += aux; // Acelera se trocar por if/else dos labels?
 
+            if (r < 5){
+               printf("Temp : %f\tLabel: %f\tLoss: %f\tRight Answers: %d\nWeights: %f %f %f %f %f\n", temp, rec_labels_train, aux, right_answers, weights[0], weights[1], weights[2], weights[3], weights[4]);
+            }
+
             /** - Computes the difference between label and hypothesis */
-            temp = labels_train[r] - temp;
+            temp = rec_labels_train[r] - temp;
 
             /** - Computes current gradient */
             r_numpixels = r*NUM_PIXELS;
             for (long x=0; x<NUM_PIXELS; x++){
-                gradient[x] += training[r_numpixels + x] * temp;
+                gradient[x] += rec_training[r_numpixels + x] * temp;
             }
         }
 
@@ -319,7 +309,11 @@ int main(int argc, char *argv[]){
 
         /** - Updates weights */
         for (int i=0; i<NUM_PIXELS; i++){
+            if (i < 5)
+                printf("Previous Weight: %f\tGradient: %f\n", weights[i], global_gradient[i]);
             weights[i] += update * global_gradient[i];
+            if (i<5)
+                printf("New Weight: %f\n", weights[i] );
         }
 
         /** - Saves epoch metrics to be plotted later */
