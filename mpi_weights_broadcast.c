@@ -399,6 +399,7 @@ int main(int argc, char *argv[]){
 
         FILE* execution_times = fopen("execution_times", "w");
         FILE* total_time = fopen("total_time", "w");
+        FILE* run_times = fopen("run_time", "a");
 
         fprintf(execution_times, "%s\t%0.9f\n", "memory_allocation_time: ", (malloc_time - start_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "Setup Serial time: ", (setup_time - start_time) );
@@ -412,7 +413,11 @@ int main(int argc, char *argv[]){
         fprintf(execution_times, "%s\t%0.9f\n", "files_time ", (files_time - test_time) );
         fprintf(execution_times, "%s\t%0.9f\n", "Total time: ", (files_time - start_time) );
 
-        fprintf(total_time, "%0.9f\n", (files_time - start_time));
+        fprintf(total_time, "%0.9f", (files_time - start_time));
+        fprintf(run_times, "%0.9f,", (files_time - start_time));
+
+        fclose(total_time);
+        fclose(run_times);
     }
 
     MPI_Finalize();
