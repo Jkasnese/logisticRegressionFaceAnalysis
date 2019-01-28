@@ -308,13 +308,13 @@ int main(int argc, char *argv[]){
 
         end_reduce_time = MPI_Wtime(); // clock();
 
-        /** - Updates weights */
-        for (int i=0; i<NUM_PIXELS; i++){
-            weights[i] += update * global_gradient[i];
-        }
-
         /** - Saves epoch metrics to be plotted later */
         if (rank == 0){
+                    /** - Updates weights */
+            for (int i=0; i<NUM_PIXELS; i++){
+                weights[i] += update * global_gradient[i];
+            }
+
             accuracies[epochs] = ((float) global_right_answers) / num_of_samples;
             losses[epochs] = global_loss;
         }
