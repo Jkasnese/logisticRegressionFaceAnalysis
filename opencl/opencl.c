@@ -10,6 +10,33 @@ Trabalho eh: Variar num de imagens, num de epocas de treino, num de computing un
 
 Variar numero de work dimensions em clEnqueueNDRangeKernel. min 1 max 3
 
+O gradiente pode ser calculado com todos os worksgroups calculando seu gradiente e depositando em algum lugar da memoria global. Blz.
+E depois? Como sincronizar pra que, ao final do calculo do gradiente, seja calculado os novos pesos e entao a nova epoca de treino?
+
+Acho que isso pode ser resolvido com child queue`s. Faz um kernel que chame outros kernels. Um loop contendo 2 kernels:
+ - O primeiro kernel calcula o gradiente atraves do treino
+ - O segundo kernel atualiza o gradiente
+Depois de finalizados estes dois kernels, o kernel pai chama depois o kernel do teste, pra calcular as estatisticas de teste
+Ou entao fazer esses enqueues no proprio host, dentro de um for que contenha o numero de epocas.
+
+Usar atomic add nos gradientes, ja que as threads vao atualizar o gradiente em paralelo.
+
+Fazer versao que explore shared memory e outra que nao explore (cache) pra comparar os tempos.
+
+Usar OpenCL profiler.
+
+Comparar operation e memory throughput com o maximo teorico do dispositivo.
+
+Latencia da memoria global eh muito maior que da memoria local, ou shared. Talvez compense separar conjuntos de imagens
+diferentes pra cada um dos CUs.
+
+"Applications can also parameterize NDRanges based on register file size and shared memory size, which depends on the compute 
+capability of the device, as well as on the number of multiprocessors and memory bandwidth of the device,
+all of which can be queried using the OpenCL API" Usar CUDA Occupancy Calculator
+
+"The number of threads per block should be chosen as a multiple of the warp size
+ to avoid wasting computing resources with under-populated warps as much as possible." -> Tem um comando do opencl pra ver o warp_size.
+
  */
 #define _GNU_SOURCE
 
@@ -409,18 +436,19 @@ int main(int argc, char *argv[]){
         checkError(err, "Copying weights to device at d_weights");
 
         // Set the arguments to our compute kernel
-        err  = clSetKernelArg(ko_vsqr, 0, sizeof(cl_mem), &d_training);
-        err |= clSetKernelArg(ko_vsqr, 1, sizeof(cl_mem), &d_test);
-        err |= clSetKernelArg(ko_vsqr, 2, sizeof(cl_mem), &d_labels_train);
-        err |= clSetKernelArg(ko_vsqr, 3, sizeof(cl_mem), &d_labels_test);
-        err |= clSetKernelArg(ko_vsqr, 4, sizeof(cl_mem), &d_weights);
-        err |= clSetKernelArg(ko_vsqr, 5, sizeof(cl_mem), &d_test_accuracy);
-        err |= clSetKernelArg(ko_vsqr, 6, sizeof(cl_mem), &d_precision);
-        err |= clSetKernelArg(ko_vsqr, 7, sizeof(cl_mem), &d_recall);
-        err |= clSetKernelArg(ko_vsqr, 8, sizeof(cl_mem), &d_fone);
-        err |= clSetKernelArg(ko_vsqr, 9, sizeof(int), &num_test_samples);
-        err |= clSetKernelArg(ko_vsqr, 10, sizeof(int), &num_of_epochs);
-        err |= clSetKernelArg(ko_vsqr, 11, sizeof(int), &num_of_samples);
+        cl_uint i = 0;
+        err  = clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_training);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_test);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_labels_train);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_labels_test);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_weights);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_test_accuracy);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_precision);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_recall);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(cl_mem), &d_fone);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(int), &num_test_samples);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(int), &num_of_epochs);
+        err |= clSetKernelArg(ko_vsqr, i++, sizeof(int), &num_of_samples);
         checkError(err, "Setting kernel arguments");
         
         rtime = wtime();
