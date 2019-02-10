@@ -54,120 +54,15 @@ all of which can be queried using the OpenCL API" Usar CUDA Occupancy Calculator
 #define MAXDEVICES 6
 #define EXIT_FAILURE -1
 
+#define BLOCK_SIZE 32 // Variar
+
 // #define NODES 3
 
 const float learning_rate = 0.01; /**< Constant that holds the learning rate */
 
 // Kernel function, to be computed @ GPU
     const char *KernelSource = "\n" \
-    "__kernel void train(       \n" \
-    "   __global float* training,      \n" \
-    "   __global float* test,          \n" \
-    "   __global float* labels_train,  \n" \
-    "   __global float* labels_test,   \n" \
-    "   __global float* weights,        \n" \
-    "   __global float test_accuracy \n" \
-    "   __global float precision \n" \
-    "   __global float recall \n" \
-    "   __global float fone \n" \
-    "   const int num_test_samples,  \n" \
-    "   const int num_of_epochs, \n" \
-    "   const int num_of_training_imgs)      \n" \
-    "{ \n" \
-    "    for (int epochs=0; epochs<num_of_epochs; epochs++){  \n" \
-    "    // Zeroing epoch stats \n" \
-    "    right_answers = 0; \n" \ // Vai usar essas metricas de cada epoca?
-    "    loss = 0; \n" \ // Vai usar essas metricas de cada epoca?
-    " \n" \
-    "    // Zeroing gradients from previous epoch \n" \
-    "    for (int i = 0; i < NUM_PIXELS; ++i) \n" \
-    "    { \n" \
-    "        gradient[i] = 0; \n" \
-    "    } \n" \
-    " \n" \
-    "    for (long r=0; r<num_of_training_imgs; r++){ \n" \
-    "        r_numpixels = r*NUM_PIXELS; \n" \
-    "        temp = 0; \n" \
-    "        for (long x=0; x<NUM_PIXELS; x++){ \n" \
-    "            temp += *(training + (r_numpixels)+x) * *(weights + x); \n" \
-    "        } \n" \
-    "        /** - Calculates logistic hypothesis */ \n" \
-    "        temp = 1 / (1 + (exp( -1.0 * temp)) ); \n" \
-    " \n" \
-    "         /** - Computes accuracy on training set */ \n" \
-    "        if (labels_train[r] == 0.0){ \n" \
-    "            if (temp < 0.5) \n" \
-    "                right_answers++; \n" \
-    "        } else { \n" \
-    "            if (!(temp < 0.5)) \n" \
-    "                right_answers++; \n" \
-    "        } \n" \
-    " \n" \
-    "        /** - Computes loss function */ \n" \
-    "        aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); \n" \
-    "        loss += aux; // Acelera se trocar por if/else dos labels? \n" \
-    " \n" \
-    "        /** - Computes the difference between label and hypothesis */ \n" \
-    "        aux = labels_train[r] - temp; \n" \
-    " \n" \
-    "        /** - Computes current gradient */ \n" \
-    "        r_numpixels = r*NUM_PIXELS; \n" \
-    "        for (long x=0; x<NUM_PIXELS; x++){ \n" \
-    "            gradient[x] += training[r_numpixels + x] * aux; \n" \
-    "        } \n" \
-    "    } \n" \
-    " \n" \
-    "    /** - Updates weights */ \n" \
-    "    for (int i=0; i<NUM_PIXELS; i++){ \n" \
-    "        weights[i] += update * gradient[i]; \n" \
-    "    } \n" \
-    " \n" \
-    "    /** - Saves epoch metrics to be plotted later */ \n" \ // Isto so eh util se transferir os dados da GPU pra CPU depois de cada epoca.
-    "   } \n" \
-    " \n" \
-    "// CALCULATE TEST METRICS \n" \
-    " // Zeroing variables to hold metrics stats: \n" \
-    "right_answers = 0; \n" \
-    "int fp = 0, tp = 0, tn = 0, fn = 0; \n" \
-    " \n" \
-    "/** - Generate hypothesis values for the test set */ \n" \
-    "for (int r=0; r<TEST_SAMPLES; r++){ \n" \
-    "    r_numpixels = r*NUM_PIXELS; \n" \
-    "    temp = 0; \n" \
-    "    for (long x=0; x<NUM_PIXELS; x++){ \n" \
-    "        temp += *(test + r_numpixels+x) * weights[x]; \n" \
-    "    } \n" \
-    "     \n" \
-    "    // Calculate logistic hypothesis \n" \
-     "   temp = 1 / (1 + (exp( -1.0 * temp)) ); \n" \
-    " \n" \
-    "    // Compute the difference between label and hypothesis & \n" \
-    "    //  accuracy on training set & \n" \
-    "    //  loss function & \n" \
-    "    //  metrics (accuracy, precision, recall, f1) \n" \
-    "    if (labels_test[r] == 1.0){ \n" \
-    "        if (temp < 0.5){ \n" \
-    "            // FP \n" \
-    "            fp++; \n" \
-    "        } else { \n" \
-    "            // TP \n" \
-    "            tp++; \n" \
-    "        } \n" \
-    "    } else { \n" \
-    "        if (temp < 0.5){ \n" \
-    "            // TN \n" \
-    "            tn++; \n" \
-    "        } else { \n" \
-    "             // FN \n" \
-    "            fn++; \n" \
-    "         } \n" \
-    "    } \n" \
-    " \n" \
-    "    test_accuracy = ((float) (tp + tn))/ num_test_samples; \n" \
-    "    precision = ((float) tp) / (tp+fp); \n" \
-    "    recall = ((float) tp) / (tp + fn); \n" \
-    "    fone = 2*((precision*recall) / (precision + recall)); \n" \
-    "} \n" \
+
 
 int main(int argc, char *argv[]){
 
@@ -297,19 +192,19 @@ int main(int argc, char *argv[]){
 
                 for (j = 0; j < (NUM_PIXELS-1); j++){
                     pixel = atof(temp_pixels);
-                        offset = i_train*NUM_PIXELS + j;
-                        training[offset] = pixel/255.0;
+                    offset = i_train*NUM_PIXELS + j;
+                    training[offset] = pixel/255.0;
 
                     temp_pixels = strtok(NULL, " ");
                 }
 
-                    training[i_train*NUM_PIXELS + j] = 1;
-                    i_train++;
-            }
-            else{
-                break;
-            }
+                training[i_train*NUM_PIXELS + j] = 1;
+                i_train++;
+                
+        } else {
+            break;
         }
+    }
 
 
     /** - Reads data from test .csv file and stores the labels and pixel values in arrays */
