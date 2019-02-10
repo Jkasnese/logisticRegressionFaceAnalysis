@@ -1,0 +1,11 @@
+memory_allocation_time: 	0.000015707
+Setup Serial time: 	4.914998538
+gen_weights_time: 	0.000303930
+bcast_time: 	0.000190283
+divide_imgs_time: 	0.000000570
+scatter_time: 	0.106798382
+reduce+allreduce_time: 	0.000082205
+Training time: 	80.202759014
+Test time: 	0.061309985
+files_time 	0.000978201
+Total time: 	85.287338903
