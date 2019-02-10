@@ -8,6 +8,9 @@
  * 
  */
 
+#define num_pixels = 128*128 + 1 // IMG_WIDTH * HEIGHT + BIAS
+#define update = 0.01 / 4487 // LEARNING RATE / NUMBER_OF_IMAGES
+
 __kernel void train(       
    __global float* training,      
    __global float* test,          
@@ -23,8 +26,6 @@ __kernel void train(
    const int num_of_epochs)      
 
 { 
-    const int num_pixels = 128 * 128 + 1; // IMG_WIDTH * HEIGHT + BIAS
-    const __local float update = 0.01 / 4487; // LEARNING RATE / NUMBER_OF_IMAGES
 
     // Get thread IDs
     int thread_id = get_global_id(0); 
@@ -36,7 +37,8 @@ __kernel void train(
 
     __local float gradient[num_pixels]; 
 
-    for (int epochs=0; epochs<num_of_epochs; epochs++){  
+    for (int epochs=0; epochs<num_of_epochs; epochs++){
+
         // Zeroing gradients from previous epoch
         for (int i = thread_id; i < num_pixels; i += get_global_size(0)) {
             gradient[i] = 0;
@@ -61,8 +63,8 @@ __kernel void train(
         barrier(CLK_LOCAL_MEM_FENCE);
 
         /** - Computes current gradient */ 
-        for (long x=0; x<num_pixels; x++){ 
-            gradient[x] += training[img + x] * aux; 
+        for (int x=0; x<num_pixels; x++){ 
+            atomic_add(gradient[x], training[img + x] * aux);
         }
 
         // Make sure all work-items/threads have finished calculating their gradient, before updating weights
@@ -79,19 +81,20 @@ __kernel void train(
     __local int fp = 0, tp = 0, tn = 0, fn = 0; 
      
     /** - Generate hypothesis values for the test set */ 
-    temp = 0; 
-    for (long x=0; x<num_pixels; x++){ 
-        temp += test[img+x] * weights[x]; 
-    } 
-     
-    // Calculate logistic hypothesis 
-    temp = 1 / (1 + (exp( -1.0 * temp)) ); 
- 
-    // Compute the difference between label and hypothesis & 
-    //  accuracy on training set & 
-    //  loss function & 
-    //  metrics (accuracy, precision, recall, f1) 
     if (thread_id =< num_test_samples) {
+        temp = 0; 
+        for (int x=0; x<num_pixels; x++){ 
+            temp += test[img+x] * weights[x]; 
+        }
+         
+        // Calculate logistic hypothesis 
+        temp = 1 / (1 + (exp( -1.0 * temp)) ); 
+     
+        // Compute the difference between label and hypothesis & 
+        //  accuracy on training set & 
+        //  loss function & 
+        //  metrics (accuracy, precision, recall, f1) 
+        
         if (labels_test[thread_id] == 1.0){ 
             if (temp < 0.5){ 
                 // FP 
@@ -109,10 +112,10 @@ __kernel void train(
                 atomic_add(fn, 1); 
             }
         }
-    } 
-     
-    test_accuracy = ((float) (tp + tn))/ num_test_samples; 
-    precision = ((float) tp) / (tp+fp); 
-    recall = ((float) tp) / (tp + fn); 
-    fone = 2*((precision*recall) / (precision + recall)); 
+         
+        test_accuracy = ((float) (tp + tn))/ num_test_samples; 
+        precision = ((float) tp) / (tp+fp); 
+        recall = ((float) tp) / (tp + fn); 
+        fone = 2*((precision*recall) / (precision + recall)); 
+    }
 } 
