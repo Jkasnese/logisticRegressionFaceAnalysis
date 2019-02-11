@@ -13,7 +13,7 @@
 
 
  
-inline void atomicAdd_g_f(volatile __local float *addr, float val)
+inline void atomicAdd_g_f(volatile __global float *addr, float val)
    {
        union {
            unsigned int u32;
@@ -23,7 +23,7 @@ inline void atomicAdd_g_f(volatile __local float *addr, float val)
        do {
        expected.f32 = current.f32;
            next.f32     = expected.f32 + val;
-        current.u32  = atomic_cmpxchg( (volatile __local unsigned int *)addr, 
+        current.u32  = atomic_cmpxchg( (volatile __global unsigned int *)addr, 
                                expected.u32, next.u32);
        } while( current.u32 != expected.u32 );
    }
@@ -44,11 +44,12 @@ inline void atomicSub_g_f(volatile __global float *addr, float val)
    }
 
 __kernel void train(       
-   __global float* training,      
-   __global float* test,          
-   __global float* labels_train,  
-   __global float* labels_test,   
-   __global float* weights,
+   __constant float* training,      
+   __constant float* test,          
+   __constant float* labels_train,  
+   __constant float* labels_test,   
+   volatile __global float* weights,
+   volatile __global float* gradient,
    volatile __global float* loss,        
    __global float* test_accuracy, 
    __global float* precision, 
@@ -66,8 +67,6 @@ __kernel void train(
     // Auxiliary variables
     float temp;
     float aux;
-
-    volatile __local float gradient[num_pixels]; 
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
@@ -116,32 +115,38 @@ __kernel void train(
     if (thread_id < num_test_samples) {
         temp = 0; 
         for (int x=0; x<num_pixels; x++) { 
-           temp += test[img+x] * weights[x]; 
+            temp += test[img+x] * weights[x]; 
         }
          
         // Calculate logistic hypothesis 
-        temp = 1 / (1 + (exp( -1.0 * temp)) ); 
+        temp = 1 / (1 + (exp(-1.0*temp))); 
      
         
         if (labels_test[thread_id] == 1.0) {  
-           if (temp < 0.5) { 
-              atomic_add(fp, 1); 
+            if (temp < 0.5) { 
+              atomic_add(&fp, 1); 
             } else { 
-                atomic_add(tp, 1); 
+               atomic_add(&tp, 1); 
             } 
         } else { 
             if (temp < 0.5) { 
-               atomic_add(tn, 1); 
+                atomic_add(&tn, 1); 
             } else { 
-               atomic_add(fn, 1); 
+                atomic_add(&fn, 1); 
             }
         }
         
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        test_accuracy = ((float) (tp + tn))/ num_test_samples; 
-        precision = ((float) tp) / (tp+fp); 
-        recall = ((float) tp) / (tp + fn); 
-        fone = 2*((precision*recall) / (precision + recall)); 
+        float ta, prec, rec, fo;
+
+        ta = ((float) (tp + tn))/ num_test_samples; 
+        *test_accuracy = ta;
+        prec = ((float) tp) / (tp+fp); 
+        *precision = prec;
+        rec = ((float) tp) / (tp + fn); 
+        *recall = rec;
+        fo = 2*((prec*rec) / (prec + rec)); 
+        *fone = fo;
     }
 } 

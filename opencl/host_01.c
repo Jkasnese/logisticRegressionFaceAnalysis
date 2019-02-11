@@ -67,7 +67,6 @@ all of which can be queried using the OpenCL API" Usar CUDA Occupancy Calculator
 
 #define BLOCK_SIZE 32 // Variar
 
-#define MAX_SOURCE_SIZE 4000
 
 // #define NODES 3
 
@@ -121,7 +120,7 @@ int main(int argc, char *argv[]){
         float *training, *test, *labels_train, *labels_test, *weights;
 
         // GPU variables
-        cl_mem d_training, d_test, d_labels_train, d_labels_test, d_weights;
+        cl_mem d_training, d_test, d_labels_train, d_labels_test, d_weights. d_gradient;
 
     // Metrics variables (GPU)    
     cl_mem d_test_accuracy, d_precision, d_recall, d_fone;
@@ -246,17 +245,21 @@ int main(int argc, char *argv[]){
     char fileName[] = "./regressor_01.c";
     char *KernelSource;
     size_t kernel_src_size;
-     
+
     /* Load the source code containing the kernel*/
-    file = fopen(fileName, "r");
+    file = fopen(fileName, "rb");
     if (!file) {
     fprintf(stderr, "Failed to load kernel.\n");
     exit(1);
     }
-    KernelSource = (char*)malloc(MAX_SOURCE_SIZE);
-    kernel_src_size = fread(KernelSource, 1, MAX_SOURCE_SIZE, file); // returns the total number of elements successfully read
+    
+    fseek(file, 0L, SEEK_END);
+    int sz = ftell(file);
+    rewind(file);
+    KernelSource = (char*)malloc(sz + 1);
+    KernelSource[sz] = '\0';
+    kernel_src_size = fread(KernelSource, sizeof(char), sz, file); // returns the total number of elements successfully read
     fclose(file);
-
 
         output_device_info(device_id);
         
@@ -270,7 +273,7 @@ int main(int argc, char *argv[]){
         
             return EXIT_FAILURE;
         }
-        // Create a command queue
+        
         commands = clCreateCommandQueue(context, device_id, 0, &ret);
         
         if (ret != CL_SUCCESS)
@@ -281,6 +284,7 @@ int main(int argc, char *argv[]){
         
             return EXIT_FAILURE;
         }
+
 
         // Create the compute program from the source buffer
         program = clCreateProgramWithSource(context, 1, (const char **) &KernelSource, (const size_t *)&kernel_src_size, &ret);
@@ -305,6 +309,8 @@ int main(int argc, char *argv[]){
             printf("%s\n", buffer);
             //return EXIT_FAILURE;
         }
+
+
         // Create the compute kernel from the program
         ko_vsqr = clCreateKernel(program, "vsqr", &err);
 
@@ -326,6 +332,9 @@ int main(int argc, char *argv[]){
         d_recall = clCreateBuffer(context,  CL_MEM_WRITE_ONLY,  sizeof(float), NULL, &err);
 
         d_fone = clCreateBuffer(context,  CL_MEM_WRITE_ONLY,  sizeof(float), NULL, &err);
+
+        d_gradient = clCreateBuffer(context, CL_MEM_READ_WRITE, NUM_PIXELS * sizeof(float), NULL, &err);
+
 
 
         // Write input arguments into compute device memory
@@ -354,6 +363,7 @@ int main(int argc, char *argv[]){
         err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_labels_train);
         err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_labels_test);
         err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_weights);
+        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_gradient);
         err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test_accuracy);
         err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_precision);
         err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_recall);
