@@ -63,7 +63,6 @@ __kernel void train(
    const int num_of_epochs)     
 
 { 
-
     // Get thread IDs
     int thread_id = get_global_id(0);
 
@@ -122,13 +121,13 @@ __kernel void train(
             temp = 1 / (1 + (exp( -1.0 * hypothesis)) ); 
      
             /** - Computes loss function */ 
-            aux = labels_train[img]*log(temp) + (1 - labels_train[img])*log(1-temp); 
+            aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
             if (0 == local_id_x && 0 == local_id_y ) {
                 atomicSub_g_f(loss[epochs], aux);
             }
      
             /** - Computes the difference between label and hypothesis */ 
-            aux = labels_train[img] - temp; 
+            aux = labels_train[r] - temp; 
             
             // MUST BE A BARRIER TO WAIT ALL WORK-GROUPS TO FINISH IN ORDER TO CALCULATE GRADIENT FOR EACH PIXEL
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -169,7 +168,7 @@ __kernel void train(
         //  loss function & 
         //  metrics (accuracy, precision, recall, f1) 
         
-        if (labels_test[thread_id] == 1.0){ 
+        if (labels_test[r] == 1.0){ 
             if (temp < 0.5){ 
                 // FP 
                 atomic_add(&fp, 1); 

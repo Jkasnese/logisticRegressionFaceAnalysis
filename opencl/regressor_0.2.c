@@ -68,6 +68,7 @@ __kernel void train(
     float temp;
     float aux;
 
+    __local float local_loss[num_of_samples / get_global_size(0)];
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
@@ -88,7 +89,7 @@ __kernel void train(
      
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
-            atomicSub_g_f(&loss[epochs], aux);
+            local_loss[thread_id] -= aux;  
      
             /** - Computes the difference between label and hypothesis */ 
             aux = labels_train[r] - temp; 
@@ -97,9 +98,20 @@ __kernel void train(
             // to prevent a thread from updating their gradient and then some other thread zeroying it's gradient.
             barrier(CLK_LOCAL_MEM_FENCE);
 
+            // Update loss epoch by reducing local_loss array
+            if (get_global_id(0) == 0){
+              float epoch_loss = 0;
+              for (int i = 0; i < num_of_samples / get_global_size(0); ++i) {
+                epoch_loss -= local_loss[i];
+              }
+              loss[epochs] = epoch_loss;
+            }
+
             /** - Computes current gradient */ 
             for (int x=0; x<num_pixels; x++){ 
-                atomicAdd_g_f(&gradient[x], training[img + x] * aux);
+                // This operation should be an atomic_add. However, NVIDIA doesn't currently supports it.
+                // To efficiency measures, we let it be a normal add, since atomic_add and + takes about the same time
+                gradient[x] += training[img + x] * aux;
             }
 
         }
