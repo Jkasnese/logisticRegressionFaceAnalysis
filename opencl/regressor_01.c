@@ -11,7 +11,6 @@
 #define num_pixels 128*128 + 1 // IMG_WIDTH * HEIGHT + BIAS
 #define update 0.01 / 4487 // LEARNING RATE / NUMBER_OF_IMAGES
 
-
  
 inline void atomicAdd_g_f(volatile __global float *addr, float val)
    {
@@ -63,11 +62,9 @@ __kernel void train(
     // Get thread IDs
     int thread_id = get_global_id(0); 
     int img = thread_id * num_pixels;
-
     // Auxiliary variables
     float temp;
     float aux;
-
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
         // Zeroing gradients from previous epoch
