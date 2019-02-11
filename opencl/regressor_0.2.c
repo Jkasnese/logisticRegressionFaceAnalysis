@@ -10,7 +10,7 @@
  * Change number of work-items (in multiples of 32) to check for performance
  */
 
-#define num_pixels 128*128 + 1 // IMG_WIDTH * HEIGHT + BIAS
+#define num_pixels 16385 // IMG_WIDTH * HEIGHT + BIAS
 #define update 0.01 / 4487 // LEARNING RATE / NUMBER_OF_IMAGES
 
 inline void atomicAdd_g_f(volatile __global float *addr, float val)
@@ -68,6 +68,7 @@ __kernel void train(
     float temp;
     float aux;
 
+
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
         // Zeroing gradients from previous epoch
@@ -86,11 +87,11 @@ __kernel void train(
             temp = 1 / (1 + (exp( -1.0 * temp)) ); 
      
             /** - Computes loss function */ 
-            aux = labels_train[img]*log(temp) + (1 - labels_train[img])*log(1-temp); 
+            aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
             atomicSub_g_f(&loss[epochs], aux);
      
             /** - Computes the difference between label and hypothesis */ 
-            aux = labels_train[img] - temp; 
+            aux = labels_train[r] - temp; 
             
             // Make sure all work-items/threads have finished their calculation before updating gradient
             // to prevent a thread from updating their gradient and then some other thread zeroying it's gradient.
@@ -98,7 +99,7 @@ __kernel void train(
 
             /** - Computes current gradient */ 
             for (int x=0; x<num_pixels; x++){ 
-                atomicAdd_g_f(gradient[x], training[img + x] * aux);
+                atomicAdd_g_f(&gradient[x], training[img + x] * aux);
             }
 
         }
@@ -132,7 +133,7 @@ __kernel void train(
         //  loss function & 
         //  metrics (accuracy, precision, recall, f1) 
         
-        if (labels_test[thread_id] == 1.0){ 
+        if (labels_test[r] == 1.0){ 
             if (temp < 0.5){ 
                 // FP 
                 atomic_add(&fp, 1); 

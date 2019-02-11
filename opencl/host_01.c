@@ -74,27 +74,23 @@ const float learning_rate = 0.01; /**< Constant that holds the learning rate */
 
 // Kernel function, to be computed @ GPU
 extern int output_device_info(cl_device_id);
+extern double wtime();
 
 
 int main(int argc, char *argv[]){
 
-
-
-
-    double start_time, setup_time, devices_time, opencl_scan, opencl_overhead_time, end_time, persistency_time;
+    double start_time, devices_time, setup_time, opencl_scan, opencl_overhead_time, end_time, persistency_time;
     double rtime;                   // current time
     start_time = wtime();
     
     // Training hyperparameters
     int num_of_epochs = atoi(argv[1]); 
     int num_of_samples = atoi(argv[2]);
-    int num_of_cu = atoi(argv[3]); 
     int num_test_samples = TEST_SAMPLES;   
 
 
     // CL devices variables
     int err;
-    int global;
     cl_device_id     device_id = NULL;      // device id
     cl_platform_id platform_id = NULL;
     cl_context       context = NULL;       // compute context
@@ -106,6 +102,9 @@ int main(int argc, char *argv[]){
     cl_uint num_devices;
     cl_int ret;
 
+    cl_ulong start, end;
+
+    cl_event event;
 
     ret = clGetPlatformIDs(1, &platform_id, &num_platforms);
     ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &num_devices);
@@ -239,10 +238,9 @@ int main(int argc, char *argv[]){
     }
 
     setup_time = wtime(); // clock();
-
     
     FILE *file;
-    char fileName[] = "./regressor_01.c";
+    char fileName[] = "./regressor_0.2.c";
     char *KernelSource;
     size_t kernel_src_size;
 
@@ -261,177 +259,294 @@ int main(int argc, char *argv[]){
     kernel_src_size = fread(KernelSource, sizeof(char), sz, file); // returns the total number of elements successfully read
     fclose(file);
 
-        output_device_info(device_id);
-        // Create a compute context
-        context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
-        if (ret != CL_SUCCESS)
-        {
-            size_t len;
-            char buffer[4350];
-            printf("ERRO: create context %s\n", err);
-        
-            return EXIT_FAILURE;
-        }
-        
-        commands = clCreateCommandQueue(context, device_id, 0, &ret);
-        
-        if (ret != CL_SUCCESS)
-        {
-            size_t len;
-            char buffer[4350];
-            printf("ERRO: create command queue %s\n", err);
-        
-            return EXIT_FAILURE;
-        }
+    output_device_info(device_id);
+    // Create a compute context
+    context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+    if (ret != CL_SUCCESS)
+    {
+        size_t len;
+        char buffer[4350];
+        printf("ERRO: create context %s\n", err);
+    
+        return EXIT_FAILURE;
+    }
+    
+    commands = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
+    if (ret != CL_SUCCESS)
+    {
+        size_t len;
+        char buffer[4350];
+        printf("ERRO: create command queue %s\n", err);
+    
+        return EXIT_FAILURE;
+    }
 
 
-        // Create the compute program from the source buffer
-        program = clCreateProgramWithSource(context, 1, (const char **) &KernelSource, (const size_t *)&kernel_src_size, &ret);
-        if (ret != CL_SUCCESS)
-        {
-            size_t len;
-            char buffer[4350];
-            printf("ERRO: create program with source %s\n", ret);
-        
-            return EXIT_FAILURE;
-        }
+    // Create the compute program from the source buffer
+    program = clCreateProgramWithSource(context, 1, (const char **) &KernelSource, (const size_t *)&kernel_src_size, &ret);
+    if (ret != CL_SUCCESS)
+    {
+        size_t len;
+        char buffer[4350];
+        printf("ERRO: create program with source %s\n", ret);
+    
+        return EXIT_FAILURE;
+    }
 
-        // Build the program
-        err = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
-        
-        if (err != CL_SUCCESS)
-        {
-            size_t len;
-            printf("ERRO Build Program: %d\n", err);
-            char buffer[16384];
-            clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);       
-            printf("%s\n", buffer);
-            //return EXIT_FAILURE;
-        }
+    // Build the program
+    err = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+    
+    if (err != CL_SUCCESS)
+    {
+        size_t len;
+        printf("ERRO Build Program: %d\n", err);
+        char buffer[16384];
+        clGetProgramBuildInfo(program, device_id, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);       
+        printf("%s\n", buffer);
+        //return EXIT_FAILURE;
+    }
 
-        // Create the compute kernel from the program
-        ko_vsqr = clCreateKernel(program, "train", &err);
-        if(err !=CL_SUCCESS)
-        {
-             size_t len;
-            printf("ERRO cREATE kernel: %d\n", err);
-        }
+    // Create the compute kernel from the program
+    ko_vsqr = clCreateKernel(program, "train", &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE kernel: %d\n", err);
+    }
 
-        // Create the input and output buffers for kernel function
-        d_training  = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * num_of_samples * NUM_PIXELS, NULL, &err);
-        d_test  = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * num_of_samples * NUM_PIXELS, NULL, &err);
-        d_labels_train = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * num_of_samples, NULL, &err);
-        d_labels_test = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * TEST_SAMPLES, NULL, &err);
-        d_weights = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float) * NUM_PIXELS, NULL, &err);
-        d_gradient = clCreateBuffer(context, CL_MEM_READ_WRITE, NUM_PIXELS * sizeof(float), NULL, &err);
-        d_loss = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * num_of_epochs, NULL, &err);
-        d_test_accuracy = clCreateBuffer(context,  CL_MEM_WRITE_ONLY,  sizeof(float), NULL, &err);
-        d_precision = clCreateBuffer(context,  CL_MEM_WRITE_ONLY,  sizeof(float), NULL, &err);
-        d_recall = clCreateBuffer(context,  CL_MEM_WRITE_ONLY,  sizeof(float), NULL, &err);
-        d_fone = clCreateBuffer(context,  CL_MEM_WRITE_ONLY,  sizeof(float), NULL, &err);
-        
+    // Create the input and output buffers for kernel function
+    d_training  = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * num_of_samples * NUM_PIXELS, NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer training: %d\n", err);
+    }
+    d_test  = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * TEST_SAMPLES * NUM_PIXELS, NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer test: %d\n", err);
+    }
+    d_labels_train = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * num_of_samples, NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer labels_train: %d\n", err);
+    }
+    d_labels_test = clCreateBuffer(context,  CL_MEM_READ_ONLY,  sizeof(float) * TEST_SAMPLES, NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer labels_test: %d\n", err);
+    }
+    d_weights = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float) * NUM_PIXELS, NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer weights: %d\n", err);
+    }
+    d_gradient = clCreateBuffer(context, CL_MEM_READ_WRITE, NUM_PIXELS * sizeof(float), NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer gradient: %d\n", err);
+    }
+    d_loss = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) * num_of_epochs, NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer loss: %d\n", err);
+    }
+    d_test_accuracy = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float), NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer accuracy: %d\n", err);
+    }
+    d_precision = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float), NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer precision: %d\n", err);
+    }
+    d_recall = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float), NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO cREATE buffer recall: %d\n", err);
+    }
+    d_fone = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(float), NULL, &err);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO createBuffer f_one: %d\n", err);
+    }
 
 
-        // Write input arguments into compute device memory
-        err = clEnqueueWriteBuffer(commands, d_training, CL_TRUE, 0, sizeof(float) * num_of_samples * NUM_PIXELS, training, 0, NULL, NULL);
-        err = clEnqueueWriteBuffer(commands, d_test, CL_TRUE, 0, sizeof(float) * TEST_SAMPLES * NUM_PIXELS, test, 0, NULL, NULL);
-        err = clEnqueueWriteBuffer(commands, d_labels_train, CL_TRUE, 0, sizeof(float) * num_of_samples, labels_train, 0, NULL, NULL);
-        err = clEnqueueWriteBuffer(commands, d_labels_test, CL_TRUE, 0, sizeof(float) * TEST_SAMPLES, labels_test, 0, NULL, NULL);
-        err = clEnqueueWriteBuffer(commands, d_weights, CL_TRUE, 0, sizeof(float) * NUM_PIXELS, weights, 0, NULL, NULL);
+    // Write input arguments into compute device memory
+    err = clEnqueueWriteBuffer(commands, d_training, CL_TRUE, 0, sizeof(float) * num_of_samples * NUM_PIXELS, training, 0, NULL, NULL);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clEnqueueWriteBuffer training: %d\n", err);
+    }
+    err = clEnqueueWriteBuffer(commands, d_test, CL_TRUE, 0, sizeof(float) * TEST_SAMPLES * NUM_PIXELS, test, 0, NULL, NULL);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clEnqueueWriteBuffer test: %d\n", err);
+    }
+    err = clEnqueueWriteBuffer(commands, d_labels_train, CL_TRUE, 0, sizeof(float) * num_of_samples, labels_train, 0, NULL, NULL);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clEnqueueWriteBuffer labels_train: %d\n", err);
+    }
+    err = clEnqueueWriteBuffer(commands, d_labels_test, CL_TRUE, 0, sizeof(float) * TEST_SAMPLES, labels_test, 0, NULL, NULL);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clEnqueueWriteBuffer labels_test: %d\n", err);
+    }
+    err = clEnqueueWriteBuffer(commands, d_weights, CL_TRUE, 0, sizeof(float) * NUM_PIXELS, weights, 0, NULL, NULL);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clEnqueueWriteBuffer weights: %d\n", err);
+    }
 
+    
+    // Set the arguments to our compute kernel
+    cl_uint d_i = 0;
+    err  = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_training);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg training: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg test: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_labels_train);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg labels_train: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_labels_test);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg labels_test: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_weights);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg weights: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_gradient);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg gradiente: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_loss);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg loss: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test_accuracy);
+    if(err !=CL_SUCCESS)
+    {
+        printf("ERRO clSetKernelArg test_accuracy: %d\n", err);
+    }
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_precision);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_recall);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_fone);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(int), &num_test_samples);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(int), &num_of_samples);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(int), &num_of_epochs);
+    
+    opencl_overhead_time = wtime();
 
-        
-        // Set the arguments to our compute kernel
-        cl_uint d_i = 0;
-        err  = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_training);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_labels_train);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_labels_test);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_weights);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_gradient);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_loss);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test_accuracy);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_precision);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_recall);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_fone);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(int), &num_test_samples);
-        err |= clSetKernelArg(ko_vsqr, d_i++, sizeof(int), &num_of_epochs);
-        
-        rtime = wtime();
-        
+    int result_kernel_wg_info;
 
-        // Execute the kernel over the entire range of our 1d input data set
-        // letting the OpenCL runtime choose the work-group size
-        int global = 1024;
-        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &global, 0, NULL, NULL);
-        if ( err != CL_SUCCESS)
-        {
-            /* code */
-            printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
-            char buffer[16384];
-        }
-        
-        // Wait for the commands to complete before stopping the timer
-        err = clFinish(commands);
-        
+    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
+    printf("Work group size: %d\n", result_kernel_wg_info);
+    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
+    printf("Local Mem size: %d\n", result_kernel_wg_info);
+    // Execute the kernel over the entire range of our 1d input data set
+    // letting the OpenCL runtime choose the work-group size
+    int global = 1024;
+    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &global, 0, NULL, &event);
+    if ( err != CL_SUCCESS)
+    {
+        /* code */
+        printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
+        char buffer[16384];
+    }
+    
+    // Wait for the commands to complete before stopping the timer
+    err = clFinish(commands);
+    if (err != CL_SUCCESS)
+    {
+        printf("Erro clFinish %d\n",  err);
+    }
 
-        rtime = wtime() - rtime;
-        printf("\nThe kernel ran in %lf seconds\n",rtime);
-        
-        // Read back the results from the compute device
-        err = clEnqueueReadBuffer(commands, d_test_accuracy, CL_TRUE, 0, sizeof(float), &test_accuracy, 0, NULL, NULL );
-        if (err != CL_SUCCESS)
-        {
-            exit(1);
-        }
+    rtime = wtime();
+    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
 
-        err = clEnqueueReadBuffer(commands, d_precision, CL_TRUE, 0, sizeof(float), &precision, 0, NULL, NULL );
-        if (err != CL_SUCCESS)
-        {
-            exit(1);
-        }
+    float exec_gpu_time = (end-start) * 1.0e-6f;
+    printf("\nThe kernel ran in %lf seconds (cpu) or %f (gpu) \n",rtime - opencl_overhead_time, exec_gpu_time);
+    
+    // Read back the results from the compute device
+    err = clEnqueueReadBuffer(commands, d_loss, CL_TRUE, 0, sizeof(float) * num_of_epochs, losses, 0, NULL, NULL );
+    if (err != CL_SUCCESS)
+    {
+        printf("Erro readBuffer loss %d\n", err);
+    }
 
-        err = clEnqueueReadBuffer(commands, d_recall, CL_TRUE, 0, sizeof(float), &recall, 0, NULL, NULL );
-        if (err != CL_SUCCESS)
-        {
-            exit(1);
-        }
+    err = clEnqueueReadBuffer(commands, d_test_accuracy, CL_TRUE, 0, sizeof(float), &test_accuracy, 0, NULL, NULL );
+    if (err != CL_SUCCESS)
+    {
+        printf("Erro readBuffer test_accuracy %d\n", err);
+    }
 
-        err = clEnqueueReadBuffer(commands, d_fone, CL_TRUE, 0, sizeof(float), &fone, 0, NULL, NULL );
-        if (err != CL_SUCCESS)
-        {
-            exit(1);
-        }
+    err = clEnqueueReadBuffer(commands, d_precision, CL_TRUE, 0, sizeof(float), &precision, 0, NULL, NULL );
+    if (err != CL_SUCCESS)
+    {
+        printf("Erro readBuffer precision %d\n", err);
+    }
 
-        // cleanup then shutdown
-        clReleaseMemObject(d_training);
-        clReleaseMemObject(d_test);
-        clReleaseMemObject(d_labels_train);
-        clReleaseMemObject(d_labels_test);
-        clReleaseMemObject(d_test_accuracy);
-        clReleaseMemObject(d_precision);
-        clReleaseMemObject(d_recall);
-        clReleaseMemObject(d_fone);
-        clReleaseProgram(program);
-        clReleaseKernel(ko_vsqr);
-        clReleaseCommandQueue(commands);
-        clReleaseContext(context);
+    err = clEnqueueReadBuffer(commands, d_recall, CL_TRUE, 0, sizeof(float), &recall, 0, NULL, NULL );
+    if (err != CL_SUCCESS)
+    {
+        printf("Erro readBuffer recall %d\n", err);
+    }
+
+    err = clEnqueueReadBuffer(commands, d_fone, CL_TRUE, 0, sizeof(float), &fone, 0, NULL, NULL );
+    if (err != CL_SUCCESS)
+    {
+        printf("Erro readBuffer fone %d\n", err);
+    }
+
+    // cleanup then shutdown
+    clReleaseMemObject(d_training);
+    clReleaseMemObject(d_test);
+    clReleaseMemObject(d_labels_train);
+    clReleaseMemObject(d_labels_test);
+    clReleaseMemObject(d_test_accuracy);
+    clReleaseMemObject(d_precision);
+    clReleaseMemObject(d_recall);
+    clReleaseMemObject(d_fone);
+    clReleaseProgram(program);
+    clReleaseKernel(ko_vsqr);
+    clReleaseCommandQueue(commands);
+    clReleaseContext(context);
 
     end_time = wtime(); // clock();
 
-    printf("oxe\n");
-
     /** - Writes metrics (accuracy, loss, precision, recall and F1 score) to files */ 
     FILE* ftest = fopen("test_metrics.txt", "w");
-    FILE* execution_times = fopen("execution_times", "w");
+    FILE* execution_times = fopen("execution_times.txt", "w");
+    FILE* f_loss = fopen("loss.txt", "w");
 
     fprintf(ftest, "%s %f\n%s %f\n%s %f\n%s %f\n", "accuracy ", test_accuracy, "precision ", precision, "recall ", recall, "f1 ", fone);
     
-    fprintf(execution_times, "%s\t%0.9f\n", "Setup Serial time: ", (setup_time - start_time) );
-    fprintf(execution_times, "%s\t%0.9f\n", "OpenCL Overhead time: ", ( (opencl_overhead_time - setup_time)) + (persistency_time - end_time) );
-    fprintf(execution_times, "%s\t%0.9f\n", "Training time: ", (end_time - opencl_overhead_time) );
-    fprintf(execution_times, "%s\t%0.9f\n", "Total time: ", (persistency_time - start_time) );
+    for(int j = 0; j < num_of_epochs; j++){
+        fprintf(f_loss, "%f\n", losses[j]);    
+    }
+    
+    fprintf(execution_times, "%s\t%0.9f\n", "Devices scan time: ", (devices_time - start_time) );
+    fprintf(execution_times, "%s\t%0.9f\n", "Setup Serial time: ", (setup_time - devices_time) );
+    fprintf(execution_times, "%s\t%0.9f\n", "OpenCL Setup time: ", (opencl_overhead_time - setup_time));
+    fprintf(execution_times, "Execution time %0.6f (s. CPU) or %0.6f (ms. GPU)\n", (rtime - opencl_overhead_time), exec_gpu_time);
+    fprintf(execution_times, "%s\t%0.9f\n", "OpenCL read_buffer time: ", (end_time - rtime) );
+    fprintf(execution_times, "%s\t%0.9f\n", "Total time: ", (end_time - start_time) );
 
+    fclose(f_loss);
     fclose(ftest);
     fclose(execution_times);
 }
