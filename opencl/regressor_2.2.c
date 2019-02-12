@@ -14,9 +14,6 @@
 #define update 0.01 / 4487 // LEARNING RATE / NUMBER_OF_IMAGES
 
 
-
-
-
 __kernel void train(       
    __constant float* training,      
    __constant float* test,          

@@ -57,7 +57,7 @@ __kernel void train(
         // Zeroing gradients from previous epoch
         for (int i = local_id_y; i < IMG_WIDTH; i += get_local_size(1)) {
             for (int j = local_id_x; j < IMG_WIDTH; j += get_local_size(0)) {
-                gradient[IMG_WIDTH * i + local_id_x] = 0;
+                gradient[IMG_WIDTH * i + j] = 0;
             }
         }
 
