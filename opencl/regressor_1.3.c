@@ -8,6 +8,7 @@
  * 
  * Coalescing reads from global memory.
  * Adding reductions (to global memory) to maintain the algorhitm correctness.
+ * Added dot_product in order to calculate images hypothesis, since each work-item calculate portions of hyp
  * TODO: Remove bias from training and testing and see how this improves memory access
  */
 
@@ -16,36 +17,6 @@
 #define IMG_WIDTH 128
 
 
-inline void atomicAdd_g_f(volatile __global float *addr, float val)
-   {
-       union {
-           unsigned int u32;
-           float        f32;
-       } next, expected, current;
-    current.f32    = *addr;
-       do {
-       expected.f32 = current.f32;
-           next.f32     = expected.f32 + val;
-        current.u32  = atomic_cmpxchg( (volatile __global unsigned int *)addr, 
-                               expected.u32, next.u32);
-       } while( current.u32 != expected.u32 );
-   }
-
-inline void atomicSub_g_f(volatile __global float *addr, float val)
-   {
-       union {
-           unsigned int u32;
-           float        f32;
-       } next, expected, current;
-    current.f32    = *addr;
-       do {
-       expected.f32 = current.f32;
-           next.f32     = expected.f32 - val;
-        current.u32  = atomic_cmpxchg( (volatile __global unsigned int *)addr, 
-                               expected.u32, next.u32);
-       } while( current.u32 != expected.u32 );
-   }
-
 __kernel void train(       
    __constant float* training,      
    __constant float* test,          
@@ -53,7 +24,9 @@ __kernel void train(
    __constant float* labels_test,   
    volatile __global float* weights,
    volatile __global float* gradient,
-   volatile __global float* loss,        
+   volatile __global float* loss,
+   __local float* local_loss,
+   __local float* dot_product,        
    __global float* test_accuracy, 
    __global float* precision, 
    __global float* recall, 
@@ -64,10 +37,6 @@ __kernel void train(
 
 { 
     // Get thread IDs
-    int thread_id = get_global_id(0);
-
-    int group_id = get_group_id(0);
-
     int local_id_x = get_local_id(0); 
     int local_id_y = get_local_id(1); 
     int local_id_z = get_local_id(2); 
@@ -79,8 +48,9 @@ __kernel void train(
     float aux;
 
     // Because of this __local memory, since max __local is 0xC000 (49152 bytes), the maximum group_size is:
-    // size_x*y*z < 12288. So for 32*32 size, we can have 12 images at z. For 64*64, we can have 4 images at z. 
-    __local float dot_product[get_local_size(0)*get_local_size(1)][get_local_size(2)];
+    // size_x*y*z < 12288. So for 32*32 size, we can have 12 images at z. For 64*64, we can have 2 images at z. 
+    // __local float dot_product[get_local_size(0)*get_local_size(1)][get_local_size(2)];
+    // __local float local_loss[get_local_size(2)]
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
@@ -92,19 +62,23 @@ __kernel void train(
         }
         
         // Each work-group trains for some images (64 prob, to maximize local gradient access, minimizing global gradient access)
-        for (int r=group_id; r<num_of_samples; r += get_num_groups(0) ) {
+        for (int r=local_id_z; r<num_of_samples; r+=get_local_size(2)) {
 
-            img = r*local_id_z*num_pixels;
+            img = r*num_pixels;
             temp = 0;
 
             // Each work-item calculates dot-product for a pixel, to coalesce global memory access 
             // Maximum expected throughput when local_size(0) == IMG_WIDTH.
             // For bigger local sizes, code has to be rewritten to consider a continum array of pixels, instead of separated by images
-            for (int y = local_id_y; y < IMG_WIDTH; y += get_local_size(1)){
+            for (int y = local_id_y; y < IMG_WIDTH; y += get_local_size(1)) {
                 for (int x= local_id_x; x<IMG_WIDTH; x += get_local_size(0)) {
                      temp += training[img + (y*IMG_WIDTH + x)] * weights[y*IMG_WIDTH + x];
                 }
             }
+
+            // Add bias
+            if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
+                temp += weights[num_pixels-1];
 
             // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
             dot_product[local_id_y*get_local_size(0) + local_id_x][local_id_z] = temp;
@@ -123,66 +97,114 @@ __kernel void train(
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
             if (0 == local_id_x && 0 == local_id_y ) {
-                atomicSub_g_f(loss[epochs], aux);
+                // Each id_z is a picture, so each first thread of each id_z can update the loss of current image
+                local_loss[local_id_z] -= aux;
             }
      
             /** - Computes the difference between label and hypothesis */ 
-            aux = labels_train[r] - temp; 
+            aux = labels_train[r] - temp;
             
-            // MUST BE A BARRIER TO WAIT ALL WORK-GROUPS TO FINISH IN ORDER TO CALCULATE GRADIENT FOR EACH PIXEL
-            barrier(CLK_LOCAL_MEM_FENCE);
-
-            /** - Computes current gradient */ 
-            for (int x=0; x<num_pixels; x++){ 
-                atomic_add(gradient[x], training[img + x] * aux);
+            /** - Computes current gradient */
+            for (int y=local_id_y; y<IMG_WIDTH; y+=get_local_size(1)) {
+                for (int x=local_id_x; x<IMG_WIDTH; x+=get_local_size(0)) {
+                    gradient[y*IMG_WIDTH + x] += training[img + (y*IMG_WIDTH + x)] * aux;
+                }
             }
 
+            // Add bias
+            if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
+                gradient[num_pixels-1] += aux;
         }
 
         // Make sure all work-items/threads have finished calculating their gradient, before updating weights
         barrier(CLK_LOCAL_MEM_FENCE);
 
         /** - Updates weights */ 
-        for (int i= thread_id; i<num_pixels; i += get_global_size(0)){ 
-            weights[i] += update * gradient[i]; 
-        } 
+        for (int y=local_id_y; y<IMG_WIDTH; y+=get_local_size(1)) {
+                for (int x=local_id_x; x<IMG_WIDTH; x+=get_local_size(0)) {
+                    weights[y*IMG_WIDTH + x] += update * gradient[img + (y*IMG_WIDTH + x)];
+                }
+        }
+
+        // Update bias weight
+        if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
+            weights[num_pixels-1] = update * gradient[num_pixels-1];
+
+        // Save epoch loss
+        float epoch_loss = 0;
+        for (int i = 0; i < get_local_size(2); ++i){
+            epoch_loss -= local_loss[i];
+        }
+        // Update epoch loss 
+        // Could be more efficient if grouped in 128 bits, i.e., 4 floats. 4 epochs per turn. 
+        loss[epochs] = epoch_loss;
     } 
  
     // CALCULATE TEST METRICS 
      // Zeroing variables to hold metrics stats: 
-    __local int fp = 0, tp = 0, tn = 0, fn = 0; 
-     
+    __local int fp, tp, tn, fn;
+    fp = 0; 
+    tp = 0; 
+    tn = 0; 
+    fn = 0;
+
+    // Make sure all weights have been updated by all the work-items
+    barrier(CLK_LOCAL_MEM_FENCE);
+
     /** - Generate hypothesis values for the test set */ 
-    for (int r = thread_id; r<num_test_samples; r += get_global_size(0)) {
+    for (int r = local_id_z; r<num_test_samples; r+= get_local_size(2)) {
         temp = 0;
         img = r*num_pixels; 
-        for (int x=0; x<num_pixels; x++){ 
-            temp += test[img+x] * weights[x]; 
+
+        for (int y = local_id_y; y < IMG_WIDTH; y += get_local_size(1)) {
+            for (int x= local_id_x; x<IMG_WIDTH; x += get_local_size(0)) {
+                 temp += test[img + (y*IMG_WIDTH + x)] * weights[y*IMG_WIDTH + x];
+            }
+        }
+
+        // Add bias
+        if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
+            temp += weights[num_pixels-1];
+
+        // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
+        dot_product[local_id_y*get_local_size(0) + local_id_x][local_id_z] = temp;
+
+        // Barrier to make sure every work-item has already calculated it's part of the hypothesis
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        // Reduce the dot product in order to calculate hypothesis
+        for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
+            hypothesis += dot_product[i][local_id_z];
         }
          
         // Calculate logistic hypothesis 
-        temp = 1 / (1 + (exp( -1.0 * temp)) ); 
+        temp = 1 / (1 + (exp( -1.0 * hypothesis)) ); 
      
         // Compute the difference between label and hypothesis & 
         //  accuracy on training set & 
         //  loss function & 
         //  metrics (accuracy, precision, recall, f1) 
-        
-        if (labels_test[r] == 1.0){ 
-            if (temp < 0.5){ 
-                // FP 
-                atomic_add(&fp, 1); 
+
+        // Since multiple work-items (multiple coordenates x,y per image)
+        // are used to calculate a single img prediction,
+        // we use only one of such work-items to update the test metrics
+        if (0 == local_id_x && 0 == local_id_y ){
+            if (labels_test[r] == 1.0){ 
+                if (temp < 0.5){ 
+                    // FP 
+                    atomic_add(&fp, 1); 
+                } else { 
+                    // TP 
+                    atomic_add(&tp, 1); 
+                } 
             } else { 
-                // TP 
-                atomic_add(&tp, 1); 
-            } 
-        } else { 
-            if (temp < 0.5){ 
-                // TN 
-                atomic_add(&tn, 1); 
-            } else { 
-                 // FN 
-                atomic_add(&fn, 1); 
+                if (temp < 0.5){ 
+                    // TN 
+                    atomic_add(&tn, 1); 
+                } else { 
+                     // FN 
+                    atomic_add(&fn, 1); 
+                }
             }
         }
     }
