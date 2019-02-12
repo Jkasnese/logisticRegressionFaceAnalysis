@@ -95,13 +95,10 @@ __kernel void train(
             if (0 == id_x) {
                 // Each id_y is a picture, so each first thread of each id_y can update the loss of current image
                 local_loss[id_y] -= aux;
-                //printf("%f\n", aux);
-
             }
 
             /** - Computes current gradient */ 
             for (int x=id_x; x<num_pixels; x+=get_local_size(0)){ 
-                //printf("%f\n", );
                 gradient[x] += training[img + x] * aux;
             }
         }
@@ -113,7 +110,6 @@ __kernel void train(
         if ( 0 == id_y){ 
             for (int i= id_x; i<num_pixels; i+= get_local_size(0)){ 
                 weights[i] += update * gradient[i]; 
-                //printf("%f\t%f\n", gradient[i], weights[i]);
             } 
         }
 
@@ -150,9 +146,11 @@ __kernel void train(
         // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
         dot_product[id_y*get_local_size(0) + id_x] = temp;
 
+        barrier(CLK_LOCAL_MEM_FENCE);
+
         // Reduce the dot product in order to calculate hypothesis
-        for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
-            hypothesis += dot_product[i];
+        for (uint i = 0; i < get_local_size(0); ++i) {
+            hypothesis += dot_product[i + id_y*get_local_size(0)];
         }
          
         // Calculate logistic hypothesis 
