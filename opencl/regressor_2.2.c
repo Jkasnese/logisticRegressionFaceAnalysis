@@ -14,6 +14,9 @@
 #define update 0.01 / 4487 // LEARNING RATE / NUMBER_OF_IMAGES
 
 
+
+
+
 __kernel void train(       
    __constant float* training,      
    __constant float* test,          
@@ -41,28 +44,30 @@ __kernel void train(
     // Auxiliary variables
     float temp;
     float aux;
+    float hypothesis;
 
     //__local float local_loss[get_local_size(1)];
     //__local float dot_product[get_local_size(0)][get_local_size(1)];
-    // So local memory used will be y_sz*(1 + x_sz). Must be less than 12284
-    // So possible square values for sizes are 32x32, 64x64, 96x96.
-    // Non-square values: 1024*11, 992x12, 929x13... [1025-(32*x)]*y < 12284
+    // So local memory used will be y_sz*(1 + x_sz). Must be less than 12284 and max_work_group_size == 1024
+    // So possible values for sizes are 32x32, 64x16, 128x8, 256x4, 512x2, 1024x1
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
-        // Zeroing gradients from previous epoch
-        for (int i = id_x; i < num_pixels; i += get_local_size(0)) {
+        // Zeroing gradients and loss from previous epoch
+        for (uint i = id_x; i < num_pixels; i += get_local_size(0)) {
             gradient[i] = 0;
         }
 
-        // id_y iterates over images
-        for (int r = id_y; r < num_of_samples; r += get_local_size(1)) {
+        local_loss[id_y] = 0;
 
+        // id_y iterates over images
+        for (uint r = id_y; r < num_of_samples; r += get_local_size(1)) {
+            hypothesis = 0;
             img = r*num_pixels;
             temp = 0; 
 
             //id_x iterates over pixels
-            for (int x=id_x; x<num_pixels; x+=get_local_size(0)){ 
+            for (uint x=id_x; x<num_pixels; x+=get_local_size(0)){ 
                 // Creating a __local buffer to weights may improve performance
                 temp += training[img+x] * weights[x]; 
             } 
@@ -74,25 +79,35 @@ __kernel void train(
             barrier(CLK_LOCAL_MEM_FENCE);
 
             // Reduce the dot product in order to calculate hypothesis
-            for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
-                hypothesis += dot_product[i];
+            // Using parallel reduction to speed up
+            for (uint stride = get_local_size(0)/2; stride > 0; stride /= 2) {
+                // Barrier to make sure all work-items have written to local memory
+                barrier(CLK_LOCAL_MEM_FENCE);
+
+                if (id_x < stride) {
+                    dot_product[id_x + id_y*get_local_size(0)] += dot_product[id_x + stride];
+                }
             }
+
+            // First element of each "row" (i.e., id_y) contains hypothesis reduction
+            hypothesis = dot_product[id_y*get_local_size(0)];
 
             /** - Calculates logistic hypothesis */ 
             temp = 1 / (1 + (exp( -1.0 * hypothesis)) ); 
      
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
-            if (0 == id_x &&) {
-                // Each id_z is a picture, so each first thread of each id_z can update the loss of current image
-                local_loss[id_y] -= aux;
-            }
 
             /** - Computes the difference between label and hypothesis */ 
             aux = labels_train[r] - temp;
-            
+
+            if (0 == id_x) {
+                // Each id_y is a picture, so each first thread of each id_y can update the loss of current image
+                local_loss[id_y] -= aux;
+            }
+
             /** - Computes current gradient */ 
-            for (int x=id_x; x<num_pixels; x+=get_local_size(0)){ 
+            for (uint x=id_x; x<num_pixels; x+=get_local_size(0)){ 
                 gradient[x] += training[img + x] * aux;
             }
         }
@@ -100,18 +115,27 @@ __kernel void train(
         // Make sure all work-items/threads have finished calculating their gradient, before updating weights
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        /** - Updates weights */ 
-        for (int i= id_x; i<num_pixels; i+= get_local_size(0)){ 
-            weights[i] += update * gradient[i]; 
-        } 
+        /** - Updates weights */
+        if ( 0 == id_y){ 
+            for (uint i= id_x; i<num_pixels; i+= get_local_size(0)){ 
+                weights[i] += update * gradient[i]; 
+            } 
+        }
 
         // Update loss epoch by reducing local_loss array
-        if (get_global_id(0) == 0){
-            float epoch_loss = 0;
-            for (int i = 0; i < num_of_samples / get_global_size(0); ++i) {
-                epoch_loss -= local_loss[i];
+        if(0 == id_y){
+            for (uint stride = get_local_size(1)/2; stride > 0; stride /= 2) {
+                // Barrier to make sure all work-items have written to local memory
+                barrier(CLK_LOCAL_MEM_FENCE);
+
+                if (id_x < stride) {
+                    local_loss[id_x] -= local_loss[id_x+stride];
+                }
             }
-            loss[epochs] = epoch_loss;
+
+            if (0 == id_x){
+                loss[epochs] = local_loss[0];
+            }
         }
     } 
  
@@ -136,12 +160,23 @@ __kernel void train(
         }
 
         // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
-        dot_product[local_id_y*get_local_size(0) + local_id_x] = temp;
+        dot_product[id_y*get_local_size(0) + id_x] = temp;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
 
         // Reduce the dot product in order to calculate hypothesis
-        for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
-            hypothesis += dot_product[i];
+        // Using parallel reduction to speed up
+        for (uint stride = get_local_size(0)/2; stride > 0; stride /= 2) {
+            // Barrier to make sure all work-items have written to local memory
+            barrier(CLK_LOCAL_MEM_FENCE);
+
+            if (id_x < stride) {
+                dot_product[id_x + id_y*get_local_size(0)] += dot_product[id_x + stride];
+            }
         }
+
+        // First element of each "row" (i.e., id_y) contains hypothesis reduction
+        hypothesis = dot_product[id_y*get_local_size(0)];
          
         // Calculate logistic hypothesis 
         temp = 1 / (1 + (exp( -1.0 * hypothesis)) ); 
