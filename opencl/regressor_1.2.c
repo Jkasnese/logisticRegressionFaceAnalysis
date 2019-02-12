@@ -111,7 +111,7 @@ __kernel void train(
         // Update loss epoch by reducing local_loss array
         if (get_global_id(0) == 0){
             float epoch_loss = 0;
-            for (int i = 0; i < num_of_samples / get_global_size(0); ++i) {
+            for (int i = 0; i < get_local_size(1); ++i) {
                 epoch_loss -= local_loss[i];
             }
             loss[epochs] = epoch_loss;
