@@ -88,14 +88,16 @@ __kernel void train(
      
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
-
-            /** - Computes the difference between label and hypothesis */ 
-            aux = labels_train[r] - temp;
-
+            
             if (0 == id_x) {
                 // Each id_y is a picture, so each first thread of each id_y can update the loss of current image
                 local_loss[id_y] -= aux;
             }
+            
+            /** - Computes the difference between label and hypothesis */ 
+            aux = labels_train[r] - temp;
+
+            
 
             /** - Computes current gradient */ 
             for (int x=id_x; x<num_pixels; x+=get_local_size(0)){ 

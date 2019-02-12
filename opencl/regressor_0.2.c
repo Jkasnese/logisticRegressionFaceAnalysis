@@ -62,9 +62,10 @@ __kernel void train(
         // Zeroing gradients and losses from previous epoch
         for (int i = thread_id; i < num_pixels; i += get_global_size(0)) {
             gradient[i] = 0;
+            if(i < num_of_samples)
+              local_loss[i] = 0;
         }
 
-        local_loss[thread_id] = 0;
 
         for (int r = thread_id; r < num_of_samples; r += get_global_size(0)) {
 
@@ -78,7 +79,7 @@ __kernel void train(
      
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
-            local_loss[thread_id] -= aux;  
+            local_loss[r] = aux;  
             /** - Computes the difference between label and hypothesis */ 
             aux = labels_train[r] - temp; 
             
@@ -90,31 +91,30 @@ __kernel void train(
             for (int x=0; x<num_pixels; x++){ 
                 // This operation should be an atomic_add. However, NVIDIA doesn't currently supports it.
                 // To efficiency measures, we let it be a normal add, since atomic_add and + takes about the same time
-                gradient[x]+= training[img+x] * aux;
+                gradient[x]+= (training[img+x] * aux);
                 //atomicAdd_g_f(&gradient[x], training[img + x] * aux);
             }
 
         }
 
         // Make sure all work-items/threads have finished calculating their gradient, before updating weights
-        barrier(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_GLOBAL_MEM_FENCE);
 
         /** - Updates weights */ 
         for (int i= thread_id; i<num_pixels; i += get_global_size(0)){ 
             weights[i] += update * gradient[i];
-            printf("%f\t%f\n", gradient[i], weights[i]); 
         } 
 
        // Update loss epoch by reducing local_loss array
-        if (thread_id == 0){
+        if (get_local_id(0) == 0){
           float epoch_loss = 0;
-          for (int i = 0; i < get_global_size(0); i++) {
+          for (int i = 0; i < num_of_samples; i++) {
             epoch_loss -= local_loss[i];
           }
           loss[epochs] = epoch_loss;
         }
 
-        barrier(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_GLOBAL_MEM_FENCE);
 
     } 
  

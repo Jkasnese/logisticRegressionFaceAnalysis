@@ -85,13 +85,14 @@ int main(int argc, char *argv[]){
     
     // Training hyperparameters
     int num_of_epochs = atoi(argv[1]); 
+    int global = atoi(argv[2]);
+     int local = atoi(argv[3]);
     int num_of_samples = TRAINING_SAMPLES;
     int num_test_samples = TEST_SAMPLES;   
 
 
     // CL devices variables
     int err;
-    int global = 1024;
     cl_device_id     device_id = NULL;      // device id
     cl_platform_id platform_id = NULL;
     cl_context       context = NULL;       // compute context
@@ -437,7 +438,7 @@ int main(int argc, char *argv[]){
     {
         printf("ERRO clSetKernelArg loss: %d\n", err);
     }
-    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(float) * global, NULL);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(float) * num_of_samples, NULL);
     err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test_accuracy);
     if(err !=CL_SUCCESS)
     {
@@ -457,7 +458,7 @@ int main(int argc, char *argv[]){
     // Execute the kernel over the entire range of our 1d input data set
     // letting the OpenCL runtime choose the work-group size
     
-    int local = 256;
+   
     err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &local, 0, NULL, &event);
     if ( err != CL_SUCCESS)
     {

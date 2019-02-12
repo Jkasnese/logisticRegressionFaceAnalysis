@@ -296,7 +296,7 @@ int main(int argc, char *argv[]){
     }
 
     // Build the program
-    err = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+    err = clBuildProgram(program, 1, &device_id, "-cl-fast-relaxed-math", NULL, NULL);
     
     if (err != CL_SUCCESS)
     {
