@@ -13,6 +13,7 @@
 #define num_pixels 16385 // IMG_WIDTH * HEIGHT + BIAS
 #define update 0.01 / 4487 // LEARNING RATE / NUMBER_OF_IMAGES
 
+
 inline void atomicAdd_g_f(volatile __global float *addr, float val)
    {
        union {
@@ -28,20 +29,6 @@ inline void atomicAdd_g_f(volatile __global float *addr, float val)
        } while( current.u32 != expected.u32 );
    }
 
-inline void atomicSub_g_f(volatile __global float *addr, float val)
-   {
-       union {
-           unsigned int u32;
-           float        f32;
-       } next, expected, current;
-    current.f32    = *addr;
-       do {
-       expected.f32 = current.f32;
-           next.f32     = expected.f32 - val;
-        current.u32  = atomic_cmpxchg( (volatile __global unsigned int *)addr, 
-                               expected.u32, next.u32);
-       } while( current.u32 != expected.u32 );
-   }
 
 __kernel void train(       
    __constant float* training,      
@@ -50,7 +37,8 @@ __kernel void train(
    __constant float* labels_test,   
    volatile __global float* weights,
    volatile __global float* gradient,
-   volatile __global float* loss,        
+   volatile __global float* loss,    
+   __local float* local_loss,     
    __global float* test_accuracy, 
    __global float* precision, 
    __global float* recall, 
@@ -68,14 +56,15 @@ __kernel void train(
     float temp;
     float aux;
 
-    __local float local_loss[num_of_samples / get_global_size(0)];
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
-        // Zeroing gradients from previous epoch
+        // Zeroing gradients and losses from previous epoch
         for (int i = thread_id; i < num_pixels; i += get_global_size(0)) {
             gradient[i] = 0;
         }
+
+        local_loss[thread_id] = 0;
 
         for (int r = thread_id; r < num_of_samples; r += get_global_size(0)) {
 
@@ -90,7 +79,6 @@ __kernel void train(
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
             local_loss[thread_id] -= aux;  
-     
             /** - Computes the difference between label and hypothesis */ 
             aux = labels_train[r] - temp; 
             
@@ -98,20 +86,12 @@ __kernel void train(
             // to prevent a thread from updating their gradient and then some other thread zeroying it's gradient.
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            // Update loss epoch by reducing local_loss array
-            if (get_global_id(0) == 0){
-              float epoch_loss = 0;
-              for (int i = 0; i < num_of_samples / get_global_size(0); ++i) {
-                epoch_loss -= local_loss[i];
-              }
-              loss[epochs] = epoch_loss;
-            }
-
             /** - Computes current gradient */ 
             for (int x=0; x<num_pixels; x++){ 
                 // This operation should be an atomic_add. However, NVIDIA doesn't currently supports it.
                 // To efficiency measures, we let it be a normal add, since atomic_add and + takes about the same time
-                gradient[x] += training[img + x] * aux;
+                gradient[x]+= training[img+x] * aux;
+                //atomicAdd_g_f(&gradient[x], training[img + x] * aux);
             }
 
         }
@@ -123,6 +103,18 @@ __kernel void train(
         for (int i= thread_id; i<num_pixels; i += get_global_size(0)){ 
             weights[i] += update * gradient[i]; 
         } 
+
+       // Update loss epoch by reducing local_loss array
+        if (thread_id == 0){
+          float epoch_loss = 0;
+          for (int i = 0; i < get_global_size(0); i++) {
+            epoch_loss -= local_loss[i];
+          }
+          loss[epochs] = epoch_loss;
+        }
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
     } 
  
     // CALCULATE TEST METRICS 
