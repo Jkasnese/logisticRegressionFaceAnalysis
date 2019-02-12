@@ -48,9 +48,8 @@ __kernel void train(
 
     //__local float local_loss[get_local_size(1)];
     //__local float dot_product[get_local_size(0)][get_local_size(1)];
-    // So local memory used will be y_sz*(1 + x_sz). Must be less than 12284
-    // So possible square values for sizes are 32x32, 64x64, 96x96.
-    // Non-square values: 1024*11, 992x12, 929x13... [1025-(32*x)]*y < 12284
+    // So local memory used will be y_sz*(1 + x_sz). Must be less than 12284 and max_work_group_size == 1024
+    // So possible values for sizes are 32x32, 64x16, 128x8, 256x4, 512x2, 1024x1
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
@@ -88,7 +87,7 @@ __kernel void train(
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
             if (0 == id_x) {
-                // Each id_z is a picture, so each first thread of each id_z can update the loss of current image
+                // Each id_y is a picture, so each first thread of each id_y can update the loss of current image
                 local_loss[id_y] -= aux;
             }
 
