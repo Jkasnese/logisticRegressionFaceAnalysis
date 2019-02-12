@@ -471,7 +471,7 @@ int main(int argc, char *argv[]){
     // Execute the kernel over the entire range of our 1d input data set
     // letting the OpenCL runtime choose the work-group size
     
-    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 3, NULL, &global, &global, 0, NULL, &event);
+    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 2, NULL, global, global, 0, NULL, &event);
     if ( err != CL_SUCCESS)
     {
         /* code */

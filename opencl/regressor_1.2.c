@@ -44,6 +44,7 @@ __kernel void train(
     // Auxiliary variables
     float temp;
     float aux;
+    float hypothesis;
 
     //__local float local_loss[get_local_size(1)];
     //__local float dot_product[get_local_size(0)][get_local_size(1)];
@@ -86,7 +87,7 @@ __kernel void train(
      
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
-            if (0 == id_x &&) {
+            if (0 == id_x) {
                 // Each id_z is a picture, so each first thread of each id_z can update the loss of current image
                 local_loss[id_y] -= aux;
             }
@@ -139,7 +140,7 @@ __kernel void train(
         }
 
         // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
-        dot_product[local_id_y*get_local_size(0) + local_id_x] = temp;
+        dot_product[id_y*get_local_size(0) + id_x] = temp;
 
         // Reduce the dot product in order to calculate hypothesis
         for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
