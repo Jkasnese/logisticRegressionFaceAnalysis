@@ -91,7 +91,11 @@ int main(int argc, char *argv[]){
 
     // CL devices variables
     int err;
-    int global = 1024;
+    int global[3];
+    global[0] = 32;
+    global[1] = 32;
+    globa[2] = 10;
+    int local_sizes[3];
     cl_device_id     device_id = NULL;      // device id
     cl_platform_id platform_id = NULL;
     cl_context       context = NULL;       // compute context
@@ -116,11 +120,11 @@ int main(int argc, char *argv[]){
     const float update = learning_rate / num_of_samples;
 
     // Data holders for training/testing.
-        // CPU variables
-        float *training, *test, *labels_train, *labels_test, *weights;
+    // CPU variables
+    float *training, *test, *labels_train, *labels_test, *weights;
 
-        // GPU variables
-        cl_mem d_training, d_test, d_labels_train, d_labels_test, d_weights, d_gradient;
+    // GPU variables
+    cl_mem d_training, d_test, d_labels_train, d_labels_test, d_weights, d_gradient, d_dot_product;
 
     // Metrics variables (GPU)    
     cl_mem d_test_accuracy, d_precision, d_recall, d_fone, d_loss, d_local_loss;
@@ -437,7 +441,8 @@ int main(int argc, char *argv[]){
     {
         printf("ERRO clSetKernelArg loss: %d\n", err);
     }
-    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(float) * global, NULL);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(float) * global[2], NULL);
+    err = clSetKernelArg(ko_vsqr, d_i++, sizeof(float) * global[0] * global[1] * global[2], NULL);
     err = clSetKernelArg(ko_vsqr, d_i++, sizeof(cl_mem), &d_test_accuracy);
     if(err !=CL_SUCCESS)
     {
@@ -458,12 +463,10 @@ int main(int argc, char *argv[]){
     printf("Work group size: %d\n", result_kernel_wg_info);
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
     printf("Local Mem size: %d\n", result_kernel_wg_info);
-    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
-    printf("PRIVATE Mem size: %d\n", result_kernel_wg_info);
     // Execute the kernel over the entire range of our 1d input data set
     // letting the OpenCL runtime choose the work-group size
     
-    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &global, 0, NULL, &event);
+    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 3, NULL, &global, &global, 0, NULL, &event);
     if ( err != CL_SUCCESS)
     {
         /* code */
