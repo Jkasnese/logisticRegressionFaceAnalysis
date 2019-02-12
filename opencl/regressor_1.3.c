@@ -26,7 +26,7 @@ __kernel void train(
    volatile __global float* gradient,
    volatile __global float* loss,
    __local float* local_loss,
-   __local float* dot_product,        
+   __local float* dot_product,
    __global float* test_accuracy, 
    __global float* precision, 
    __global float* recall, 
