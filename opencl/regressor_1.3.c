@@ -60,6 +60,10 @@ __kernel void train(
                 gradient[IMG_WIDTH * i + local_id_x] = 0;
             }
         }
+
+        // Zero bias
+            if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
+                gradient[num_pixels-1];
         
         // Each work-group trains for some images (64 prob, to maximize local gradient access, minimizing global gradient access)
         for (int r=local_id_z; r<num_of_samples; r+=get_local_size(2)) {
