@@ -81,12 +81,12 @@ __kernel void train(
             // Reduce the dot product in order to calculate hypothesis
             // Using parallel reduction to speed up
             for (uint stride = get_local_size(0)/2; stride > 0; stride /= 2) {
+                if (id_x < stride) {
+                    dot_product[id_x + id_y*get_local_size(0)] += dot_product[id_x + stride + id_y*get_local_size(0)];
+                }
+
                 // Barrier to make sure all work-items have written to local memory
                 barrier(CLK_LOCAL_MEM_FENCE);
-
-                if (id_x < stride) {
-                    dot_product[id_x + id_y*get_local_size(0)] += dot_product[id_x + stride];
-                }
             }
 
             // First element of each "row" (i.e., id_y) contains hypothesis reduction
@@ -125,12 +125,12 @@ __kernel void train(
         // Update loss epoch by reducing local_loss array
         if(0 == id_y){
             for (uint stride = get_local_size(1)/2; stride > 0; stride /= 2) {
-                // Barrier to make sure all work-items have written to local memory
-                barrier(CLK_LOCAL_MEM_FENCE);
-
                 if (id_x < stride) {
                     local_loss[id_x] -= local_loss[id_x+stride];
                 }
+
+                // Barrier to make sure all work-items have written to local memory
+                barrier(CLK_LOCAL_MEM_FENCE);
             }
 
             if (0 == id_x){
@@ -167,12 +167,12 @@ __kernel void train(
         // Reduce the dot product in order to calculate hypothesis
         // Using parallel reduction to speed up
         for (uint stride = get_local_size(0)/2; stride > 0; stride /= 2) {
+            if (id_x < stride) {
+                dot_product[id_x + id_y*get_local_size(0)] += dot_product[id_x + stride + id_y*get_local_size(0)];
+            }
+
             // Barrier to make sure all work-items have written to local memory
             barrier(CLK_LOCAL_MEM_FENCE);
-
-            if (id_x < stride) {
-                dot_product[id_x + id_y*get_local_size(0)] += dot_product[id_x + stride];
-            }
         }
 
         // First element of each "row" (i.e., id_y) contains hypothesis reduction
