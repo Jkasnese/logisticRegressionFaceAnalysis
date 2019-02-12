@@ -91,10 +91,11 @@ int main(int argc, char *argv[]){
 
     // CL devices variables
     int err;
-    int global[3];
-    global[0] = 32;
-    global[1] = 32;
-    globa[2] = 10;
+    size_t* global;
+    global = (size_t *)malloc((3)*sizeof(size_t));
+    global[0] = 16;
+    global[1] = 16;
+    global[2] = 4;
     int local_sizes[3];
     cl_device_id     device_id = NULL;      // device id
     cl_platform_id platform_id = NULL;
@@ -245,7 +246,7 @@ int main(int argc, char *argv[]){
     setup_time = wtime(); // clock();
     
     FILE *file;
-    char fileName[] = "./regressor_0.2.c";
+    char fileName[] = "./regressor_1.3.c";
     char *KernelSource;
     size_t kernel_src_size;
 
@@ -466,7 +467,7 @@ int main(int argc, char *argv[]){
     // Execute the kernel over the entire range of our 1d input data set
     // letting the OpenCL runtime choose the work-group size
     
-    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 3, NULL, &global, &global, 0, NULL, &event);
+    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 3, NULL, global, global, 0, NULL, &event);
     if ( err != CL_SUCCESS)
     {
         /* code */

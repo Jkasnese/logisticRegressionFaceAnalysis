@@ -454,16 +454,11 @@ int main(int argc, char *argv[]){
 
     int result_kernel_wg_info;
 
-    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
-    printf("Work group size: %d\n", result_kernel_wg_info);
-    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
-    printf("Local Mem size: %d\n", result_kernel_wg_info);
-    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
-    printf("PRIVATE Mem size: %d\n", result_kernel_wg_info);
     // Execute the kernel over the entire range of our 1d input data set
     // letting the OpenCL runtime choose the work-group size
     
-    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &global, 0, NULL, &event);
+    int local = 256;
+    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &local, 0, NULL, &event);
     if ( err != CL_SUCCESS)
     {
         /* code */
@@ -471,6 +466,13 @@ int main(int argc, char *argv[]){
         char buffer[16384];
     }
     
+    
+    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
+    printf("Work group size: %d\n", result_kernel_wg_info);
+    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
+    printf("Local Mem size: %d\n", result_kernel_wg_info);
+    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
+    printf("PRIVATE Mem size: %d\n", result_kernel_wg_info);    
     // Wait for the commands to complete before stopping the timer
     err = clFinish(commands);
     if (err != CL_SUCCESS)

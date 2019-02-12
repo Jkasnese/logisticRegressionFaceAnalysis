@@ -57,7 +57,7 @@ __kernel void train(
         // Zeroing gradients from previous epoch
         for (int i = local_id_y; i < IMG_WIDTH; i += get_local_size(1)) {
             for (int j = local_id_x; j < IMG_WIDTH; j += get_local_size(0)) {
-                gradient[IMG_WIDTH * i + local_id_x] = 0;
+                gradient[IMG_WIDTH * i + j] = 0;
             }
         }
 
@@ -85,14 +85,15 @@ __kernel void train(
                 temp += weights[num_pixels-1];
 
             // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
-            dot_product[local_id_y*get_local_size(0) + local_id_x][local_id_z] = temp;
+            //dot_product[local_id_y*get_local_size(0) + local_id_x][local_id_z] = temp;
+            dot_product[(local_id_y*get_local_size(0) + local_id_x) * local_id_z] = temp;
 
             // Barrier to make sure every work-item has already calculated it's part of the hypothesis
             barrier(CLK_LOCAL_MEM_FENCE);
 
             // Reduce the dot product in order to calculate hypothesis
             for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
-                hypothesis += dot_product[i][local_id_z];
+                hypothesis += dot_product[i * local_id_z];
             }
 
             /** - Calculates logistic hypothesis */ 
@@ -171,14 +172,14 @@ __kernel void train(
             temp += weights[num_pixels-1];
 
         // Each work-item computes part of the image hypothesis, stored in the __local hypothesis array
-        dot_product[local_id_y*get_local_size(0) + local_id_x][local_id_z] = temp;
+        dot_product[(local_id_y*get_local_size(0) + local_id_x) *local_id_z] = temp;
 
         // Barrier to make sure every work-item has already calculated it's part of the hypothesis
         barrier(CLK_LOCAL_MEM_FENCE);
 
         // Reduce the dot product in order to calculate hypothesis
         for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
-            hypothesis += dot_product[i][local_id_z];
+            hypothesis += dot_product[i * local_id_z];
         }
          
         // Calculate logistic hypothesis 
