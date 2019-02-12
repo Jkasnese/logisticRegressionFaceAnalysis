@@ -124,17 +124,20 @@ __kernel void train(
         // Make sure all work-items/threads have finished calculating their gradient, before updating weights
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        /** - Updates weights */ 
-        for (int y=local_id_y; y<IMG_WIDTH; y+=get_local_size(1)) {
-                for (int x=local_id_x; x<IMG_WIDTH; x+=get_local_size(0)) {
-                    weights[y*IMG_WIDTH + x] += update * gradient[img + (y*IMG_WIDTH + x)];
-                }
+        /** - Updates weights */
+        if ( 0 == local_id_z){ 
+            for (int y=local_id_y; y<IMG_WIDTH; y+=get_local_size(1)) {
+                    for (int x=local_id_x; x<IMG_WIDTH; x+=get_local_size(0)) {
+                        weights[y*IMG_WIDTH + x] += update * gradient[img + (y*IMG_WIDTH + x)];
+                    }
+            }
+
+            // Update bias weight
+            if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
+                weights[num_pixels-1] = update * gradient[num_pixels-1];
         }
 
-        // Update bias weight
-        if (local_id_x == get_local_size(0)-1 && local_id_y == get_local_size(1) -1)
-            weights[num_pixels-1] = update * gradient[num_pixels-1];
-
+        
         // Save epoch loss
         float epoch_loss = 0;
         for (int i = 0; i < get_local_size(2); ++i){

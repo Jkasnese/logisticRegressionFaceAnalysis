@@ -53,14 +53,16 @@ __kernel void train(
 
     for (int epochs=0; epochs<num_of_epochs; epochs++){
 
-        // Zeroing gradients from previous epoch
+        // Zeroing gradients and loss from previous epoch
         for (int i = id_x; i < num_pixels; i += get_local_size(0)) {
             gradient[i] = 0;
         }
 
+        local_loss[id_y] = 0;
+
         // id_y iterates over images
         for (int r = id_y; r < num_of_samples; r += get_local_size(1)) {
-
+            hypothesis = 0;
             img = r*num_pixels;
             temp = 0; 
 
@@ -77,8 +79,8 @@ __kernel void train(
             barrier(CLK_LOCAL_MEM_FENCE);
 
             // Reduce the dot product in order to calculate hypothesis
-            for (uint i = 0; i < get_local_size(0)*get_local_size(1); ++i) {
-                hypothesis += dot_product[i];
+            for (uint i = 0; i < get_local_size(0); ++i) {
+                hypothesis += dot_product[i + id_y*get_local_size(0)];
             }
 
             /** - Calculates logistic hypothesis */ 
@@ -86,16 +88,20 @@ __kernel void train(
      
             /** - Computes loss function */ 
             aux = labels_train[r]*log(temp) + (1 - labels_train[r])*log(1-temp); 
-            if (0 == id_x) {
-                // Each id_y is a picture, so each first thread of each id_y can update the loss of current image
-                local_loss[id_y] -= aux;
-            }
 
             /** - Computes the difference between label and hypothesis */ 
             aux = labels_train[r] - temp;
-            
+
+            if (0 == id_x) {
+                // Each id_y is a picture, so each first thread of each id_y can update the loss of current image
+                local_loss[id_y] -= aux;
+                //printf("%f\n", aux);
+
+            }
+
             /** - Computes current gradient */ 
             for (int x=id_x; x<num_pixels; x+=get_local_size(0)){ 
+                //printf("%f\n", );
                 gradient[x] += training[img + x] * aux;
             }
         }
@@ -103,10 +109,13 @@ __kernel void train(
         // Make sure all work-items/threads have finished calculating their gradient, before updating weights
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        /** - Updates weights */ 
-        for (int i= id_x; i<num_pixels; i+= get_local_size(0)){ 
-            weights[i] += update * gradient[i]; 
-        } 
+        /** - Updates weights */
+        if ( 0 == id_y){ 
+            for (int i= id_x; i<num_pixels; i+= get_local_size(0)){ 
+                weights[i] += update * gradient[i]; 
+                //printf("%f\t%f\n", gradient[i], weights[i]);
+            } 
+        }
 
         // Update loss epoch by reducing local_loss array
         if (get_global_id(0) == 0){

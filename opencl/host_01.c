@@ -85,7 +85,7 @@ int main(int argc, char *argv[]){
     
     // Training hyperparameters
     int num_of_epochs = atoi(argv[1]); 
-    int num_of_samples = atoi(argv[2]);
+    int num_of_samples = TRAINING_SAMPLES;
     int num_test_samples = TEST_SAMPLES;   
 
 
@@ -466,7 +466,7 @@ int main(int argc, char *argv[]){
         char buffer[16384];
     }
     
-    
+
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
     printf("Work group size: %d\n", result_kernel_wg_info);
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);

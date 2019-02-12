@@ -63,8 +63,6 @@ all of which can be queried using the OpenCL API" Usar CUDA Occupancy Calculator
 #define NUM_PIXELS 16385 // Num pixels + 1 (bias)
 
 #define MAXDEVICES 6
-#define EXIT_FAILURE -1
-
 #define BLOCK_SIZE 32 // Variar
 
 

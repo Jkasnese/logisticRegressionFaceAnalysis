@@ -73,7 +73,7 @@ __kernel void train(
             for (int x=0; x<num_pixels; x++){ 
                 temp += training[img+x] * weights[x]; 
             } 
-            /** - Calculates logistic hypothesis */ 
+            /** - Calculates logistic hypothesis */
             temp = 1 / (1 + (exp( -1.0 * temp)) ); 
      
             /** - Computes loss function */ 
@@ -101,7 +101,8 @@ __kernel void train(
 
         /** - Updates weights */ 
         for (int i= thread_id; i<num_pixels; i += get_global_size(0)){ 
-            weights[i] += update * gradient[i]; 
+            weights[i] += update * gradient[i];
+            printf("%f\t%f\n", gradient[i], weights[i]); 
         } 
 
        // Update loss epoch by reducing local_loss array
