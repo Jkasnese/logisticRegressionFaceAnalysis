@@ -242,7 +242,7 @@ int main(int argc, char *argv[]){
     setup_time = wtime(); // clock();
     
     FILE *file;
-    char fileName[] = "./regressor_0.2.c";
+    char fileName[] = "./regressor_01.c";
     char *KernelSource;
     size_t kernel_src_size;
 
@@ -467,9 +467,9 @@ int main(int argc, char *argv[]){
     // letting the OpenCL runtime choose the work-group size
     FILE* f_rtime = fopen("rtimes.txt", "w");
     float exec_gpu_time;
-    for (int i = 16; i < work_group_size + 1; i = i*2) {
+  //  for (int i = 256; i < 512; i += 2) {
 
-        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &i, &i, 0, NULL, &event);
+        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &local, 0, NULL, &event);
         if ( err != CL_SUCCESS) {
             printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
             char buffer[16384];
@@ -487,9 +487,9 @@ int main(int argc, char *argv[]){
         clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
 
         exec_gpu_time = (end-start) * 1.0e-6f;
-        fprintf(f_rtime, "%d\t%f\n", i, exec_gpu_time);
-    }
-    fclose(f_rtime);
+        // fprintf(f_rtime, "%d\t%f\n", i, exec_gpu_time);
+    //}
+    //fclose(f_rtime);
 
     printf("\nThe kernel ran in %lf seconds (cpu) or %f (gpu) \n",rtime - opencl_overhead_time, exec_gpu_time);
     

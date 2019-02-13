@@ -473,9 +473,9 @@ int main(int argc, char *argv[]){
     float exec_gpu_time;
     
     // Run with 1024 1 on initial conditions
-    for (int i = 32; i > 0; i = i/2) {
+    for (int i = 1024; i > 0; i = i/2) {
 
-        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 2, NULL, &global, &global, 0, NULL, &event);
+        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 2, NULL, global, global, 0, NULL, &event);
         if ( err != CL_SUCCESS) {
             printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
             char buffer[16384];
@@ -503,7 +503,7 @@ int main(int argc, char *argv[]){
     clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
     clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
 
-    float exec_gpu_time = (end-start) * 1.0e-6f;
+    exec_gpu_time = (end-start) * 1.0e-6f;
     printf("\nThe kernel ran in %lf seconds (cpu) or %f (gpu) \n",rtime - opencl_overhead_time, exec_gpu_time);
     
     // Read back the results from the compute device
