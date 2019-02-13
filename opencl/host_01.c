@@ -454,9 +454,10 @@ int main(int argc, char *argv[]){
     opencl_overhead_time = wtime();
 
     int result_kernel_wg_info;
+    int work_group_size;
 
-    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
-    printf("Work group size: %d\n", result_kernel_wg_info);
+    clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &work_group_size, NULL);
+    printf("Work group size: %d\n", work_group_size);
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
     printf("Local Mem size: %d\n", result_kernel_wg_info);
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
@@ -466,7 +467,7 @@ int main(int argc, char *argv[]){
     // letting the OpenCL runtime choose the work-group size
     FILE* f_rtime = fopen("rtimes.txt", "w");
     float exec_gpu_time;
-    for (int i = 16; i < 1025; i = i*2) {
+    for (int i = 16; i < work_group_size + 1; i = i*2) {
 
         err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &i, &i, 0, NULL, &event);
         if ( err != CL_SUCCESS) {
