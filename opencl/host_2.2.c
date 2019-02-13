@@ -469,20 +469,35 @@ int main(int argc, char *argv[]){
     // Execute the kernel over the entire range of our 1d input data set
     // letting the OpenCL runtime choose the work-group size
     
-    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 2, NULL, global, global, 0, NULL, &event);
-    if ( err != CL_SUCCESS)
-    {
-        /* code */
-        printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
-        char buffer[16384];
-    }
+    FILE* f_rtime = fopen("rtimes.txt", "w");
+    float exec_gpu_time;
     
-    // Wait for the commands to complete before stopping the timer
-    err = clFinish(commands);
-    if (err != CL_SUCCESS)
-    {
-        printf("Erro clFinish %d\n",  err);
+    // Run with 1024 1 on initial conditions
+    for (int i = 32; i > 0; i = i/2) {
+
+        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 2, NULL, &global, &global, 0, NULL, &event);
+        if ( err != CL_SUCCESS) {
+            printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
+            char buffer[16384];
+        }
+        
+        // Wait for the commands to complete before stopping the timer
+        err = clFinish(commands);
+        if (err != CL_SUCCESS)
+        {
+            printf("Erro clFinish %d\n",  err);
+        }
+
+        rtime = wtime();
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+
+        exec_gpu_time = (end-start) * 1.0e-6f;
+        fprintf(f_rtime, "%d\t%f\n", i, exec_gpu_time);
+        global[0] /= 2;
+        global[1] *= 2;
     }
+    fclose(f_rtime);
 
     rtime = wtime();
     clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
