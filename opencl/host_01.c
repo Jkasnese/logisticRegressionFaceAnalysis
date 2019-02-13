@@ -76,7 +76,7 @@ const float learning_rate = 0.01; /**< Constant that holds the learning rate */
 extern int output_device_info(cl_device_id);
 extern double wtime();
 
-
+// Parameters: number of epochs, global_size, local_size
 int main(int argc, char *argv[]){
 
     double start_time, devices_time, setup_time, opencl_scan, opencl_overhead_time, end_time, persistency_time;
@@ -455,37 +455,41 @@ int main(int argc, char *argv[]){
 
     int result_kernel_wg_info;
 
-    // Execute the kernel over the entire range of our 1d input data set
-    // letting the OpenCL runtime choose the work-group size
-    
-   
-    err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &global, &local, 0, NULL, &event);
-    if ( err != CL_SUCCESS)
-    {
-        /* code */
-        printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
-        char buffer[16384];
-    }
-    
-
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
     printf("Work group size: %d\n", result_kernel_wg_info);
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_LOCAL_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
     printf("Local Mem size: %d\n", result_kernel_wg_info);
     clGetKernelWorkGroupInfo(ko_vsqr, device_id, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(int), &result_kernel_wg_info, NULL);
     printf("PRIVATE Mem size: %d\n", result_kernel_wg_info);    
-    // Wait for the commands to complete before stopping the timer
-    err = clFinish(commands);
-    if (err != CL_SUCCESS)
-    {
-        printf("Erro clFinish %d\n",  err);
+
+    // Execute the kernel over the entire range of our 1d input data set
+    // letting the OpenCL runtime choose the work-group size
+    FILE* f_rtime = fopen("rtimes.txt", "w");
+    float exec_gpu_time;
+    for (int i = 16; i < 1025; i = i*2) {
+
+        err = clEnqueueNDRangeKernel(commands, ko_vsqr, 1, NULL, &i, &i, 0, NULL, &event);
+        if ( err != CL_SUCCESS) {
+            printf("Erro no clEnqueueNDRangeKernel = %d\n", err);
+            char buffer[16384];
+        }
+        
+        // Wait for the commands to complete before stopping the timer
+        err = clFinish(commands);
+        if (err != CL_SUCCESS)
+        {
+            printf("Erro clFinish %d\n",  err);
+        }
+
+        rtime = wtime();
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+        clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+
+        exec_gpu_time = (end-start) * 1.0e-6f;
+        fprintf(f_rtime, "%d\t%f\n", i, exec_gpu_time);
     }
+    fclose(f_rtime);
 
-    rtime = wtime();
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
-
-    float exec_gpu_time = (end-start) * 1.0e-6f;
     printf("\nThe kernel ran in %lf seconds (cpu) or %f (gpu) \n",rtime - opencl_overhead_time, exec_gpu_time);
     
     // Read back the results from the compute device
